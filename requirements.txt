@@ -1,0 +1,6 @@
+langchain
+langchain-groq
+python-dotenv
+langchain-community<0.4
+chromadb<1.0
+sentence-transformers<4

@@ -1,0 +1,38 @@
+DOCUMENT: CARD DISPUTE HANDLING POLICY
+DOCUMENT ID: POL-001
+VERSION: 1.0
+
+PURPOSE:
+This document describes the illustrative process for
+handling disputed card transactions.
+
+DISPUTE INITIATION:
+A customer who identifies an unauthorized or incorrect
+card transaction should report it through the bank's
+official customer support channel.
+
+REQUIRED INFORMATION:
+The customer should provide:
+1. Customer ID.
+2. Card or account reference.
+3. Transaction date.
+4. Transaction amount.
+5. Merchant name.
+6. Reason for raising the dispute.
+
+INVESTIGATION:
+The operations team should verify the transaction
+details and review the available supporting evidence.
+
+STATUS TRACKING:
+Each dispute should receive a unique dispute reference
+number. Its status should be tracked as Open,
+Under Investigation, Resolved or Rejected.
+
+RESOLUTION:
+The outcome should be communicated to the customer
+through an approved communication channel.
+
+IMPORTANT:
+These are fictional training procedures created for
+the BankMate project. They are not actual bank policies.

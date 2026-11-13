@@ -1,0 +1,11 @@
+transaction_id,customer_id,transaction_date,transaction_type,amount,merchant
+T001,C101,2026-11-01,Debit,2500,Amazon
+T002,C101,2026-11-02,Debit,1200,Swiggy
+T003,C101,2026-11-03,Credit,25000,Salary
+T004,C101,2026-11-04,Debit,4500,Shopping
+T005,C101,2026-11-05,Debit,800,Uber
+T006,C102,2026-11-01,Debit,1500,Amazon
+T007,C102,2026-11-02,Credit,30000,Salary
+T008,C103,2026-11-03,Debit,3000,Travel
+T009,C103,2026-11-04,Credit,40000,Salary
+T010,C103,2026-11-05,Debit,500,Food

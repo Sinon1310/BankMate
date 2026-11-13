@@ -1,0 +1,28 @@
+DOCUMENT: TRANSACTION SECURITY GUIDELINES
+DOCUMENT ID: POL-003
+VERSION: 1.0
+
+PURPOSE:
+This document describes illustrative transaction
+security practices.
+
+CUSTOMER PROTECTION:
+Customers should never share their PIN, password,
+OTP or confidential authentication credentials.
+
+SUSPICIOUS ACTIVITY:
+Potentially suspicious transactions should be flagged
+for further review by the appropriate operations team.
+
+INVESTIGATION:
+The review should consider transaction amount,
+merchant information, transaction location and
+available historical activity.
+
+ESCALATION:
+Potential security incidents should be escalated
+through the designated internal security process.
+
+IMPORTANT:
+These are fictional training procedures created for
+the BankMate project. They are not actual bank policies.

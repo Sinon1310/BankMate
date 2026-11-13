@@ -1,0 +1,31 @@
+DOCUMENT: TRANSACTION REFUND POLICY
+DOCUMENT ID: POL-002
+VERSION: 1.0
+
+PURPOSE:
+This document describes an illustrative refund process.
+
+REFUND REQUEST:
+A customer may raise a refund request when a transaction
+is duplicated, cancelled or incorrectly charged.
+
+VALIDATION:
+The operations team should verify:
+1. Original transaction ID.
+2. Transaction amount.
+3. Transaction date.
+4. Merchant information.
+5. Refund eligibility.
+
+PROCESSING:
+Once approved, the refund should be processed through
+the appropriate payment processing workflow.
+
+TRACKING:
+Every refund request should have a unique reference ID.
+The status should be tracked as Pending, Processing,
+Completed or Rejected.
+
+IMPORTANT:
+These are fictional training procedures created for
+the BankMate project. They are not actual bank policies.

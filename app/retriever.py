@@ -1,38 +1,86 @@
 
-from app.vector_store import CHROMA_DIR
-from app.embeddings import get_embedding_model
+from pathlib import Path
 
 from langchain_chroma import Chroma
+from app.embeddings import get_embedding_model
 
 
-def get_retriever():
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+CHROMA_DIR = PROJECT_ROOT / "chroma_db"
+
+
+def get_vector_store():
     embeddings = get_embedding_model()
 
-    vector_store = Chroma(
+    return Chroma(
         collection_name="bankmate_policies",
         embedding_function=embeddings,
         persist_directory=str(CHROMA_DIR)
     )
 
-    retriever = vector_store.as_retriever(
+
+def get_retriever():
+    vector_store = get_vector_store()
+
+    return vector_store.as_retriever(
         search_type="similarity",
         search_kwargs={"k": 3}
     )
 
-    return retriever
+
+def search_with_scores(question, k=3):
+    vector_store = get_vector_store()
+
+    results = vector_store.similarity_search_with_score(
+        question,
+        k=k
+    )
+
+    return results
+
+def search_relevant_documents(question, k=3, max_distance=1.3):
+    """
+    Retrieve only documents within the configured
+    maximum distance.
+
+    Lower distance indicates greater similarity.
+    """
+
+    results = search_with_scores(question, k)
+
+    relevant_documents = [
+        (document, distance)
+        for document, distance in results
+        if distance <= max_distance
+    ]
+
+    return relevant_documents
+
+
+
 
 
 if __name__ == "__main__":
-    retriever = get_retriever()
 
-    question = "What should a customer do if they notice an unauthorized card transaction?"
+    test_questions = [
+        "What should he do if he notices an unauthorized transaction?",
+        "What should a customer do about an unauthorized card transaction?",
+        "What should a customer do if they notice an unauthorized card transaction?",
+        "What is the bank's home loan interest rate?"
+    ]
 
-    results = retriever.invoke(question)
+    for question in test_questions:
 
-    print("\nQUESTION:", question)
-    print("\nRETRIEVED DOCUMENTS:")
+        print("\n" + "=" * 65)
+        print("QUESTION:", question)
+        print("=" * 65)
 
-    for index, document in enumerate(results, start=1):
-        print(f"\n--- RESULT {index} ---")
-        print("Source:", document.metadata["source"])
-        print("Content:", document.page_content)
+        # IMPORTANT: Raw distances, without threshold filtering
+        results = search_with_scores(question, k=3)
+
+        for index, (document, distance) in enumerate(results, start=1):
+
+            print(f"\nRESULT {index}")
+            print(f"Distance: {distance:.4f}")
+            print("Source:", document.metadata.get("source"))
+            print("Content:", document.page_content[:300])

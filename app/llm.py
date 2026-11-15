@@ -7,7 +7,8 @@ from langchain_groq import ChatGroq
 from app.tools import (
     get_customer_profile,
     get_customer_transactions,
-    get_customer_metrics
+    get_customer_metrics,
+    search_banking_policies
 )
 
 # Load .env from the project root
@@ -23,7 +24,8 @@ if not os.getenv("GROQ_API_KEY"):
 tools = [
     get_customer_profile,
     get_customer_transactions,
-    get_customer_metrics
+    get_customer_metrics,
+    search_banking_policies
 ]
 
 

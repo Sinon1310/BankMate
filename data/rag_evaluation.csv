@@ -1,0 +1,11 @@
+
+question,expected_policy_id
+"What information is required to raise a card dispute?",POL-001
+"What should a customer do after noticing an unauthorized card transaction?",POL-001
+"What happens after a customer submits a dispute?",POL-001
+"How are refunds handled for duplicate transactions?",POL-002
+"What happens when a refund is approved?",POL-002
+"What should customers never share with anyone?",POL-003
+"How are suspicious transactions investigated?",POL-003
+"What is the bank's home loan interest rate?",NONE
+"What is the bank's personal loan interest rate?",NONE

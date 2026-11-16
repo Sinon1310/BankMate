@@ -19,8 +19,18 @@ def get_vector_store():
     )
 
 
-def get_retriever():
+def get_retriever(search_type="similarity"):
     vector_store = get_vector_store()
+
+    if search_type == "mmr":
+        return vector_store.as_retriever(
+            search_type="mmr",
+            search_kwargs={
+                "k": 3,
+                "fetch_k": 7,
+                "lambda_mult": 0.5
+            }
+        )
 
     return vector_store.as_retriever(
         search_type="similarity",
@@ -59,6 +69,31 @@ def search_relevant_documents(question, k=3, max_distance=1.3):
 
 
 
+def search_by_policy(question, policy_id, k=3, section=None):
+
+    vector_store = get_vector_store()
+
+    metadata_filter = {
+        "policy_id": policy_id
+    }
+
+    if section:
+        metadata_filter = {
+            "$and": [
+                {"policy_id": policy_id},
+                {"section": section.upper()}
+            ]
+        }
+
+    results = vector_store.similarity_search(
+        query=question,
+        k=k,
+        filter=metadata_filter
+    )
+
+    return results
+
+
 
 if __name__ == "__main__":
 
@@ -84,3 +119,17 @@ if __name__ == "__main__":
             print(f"Distance: {distance:.4f}")
             print("Source:", document.metadata.get("source"))
             print("Content:", document.page_content[:300])
+
+print("\nSECTION FILTERING TEST")
+
+results = search_by_policy(
+    question="What happens when a refund is approved?",
+    policy_id="POL-002",
+    section="PROCESSING",
+    k=3
+)
+
+for doc in results:
+    print("\nPolicy:", doc.metadata["policy_id"])
+    print("Section:", doc.metadata["section"])
+    print("Content:", doc.page_content)

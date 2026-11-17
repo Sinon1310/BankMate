@@ -1,4 +1,4 @@
-import os
+
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -11,7 +11,8 @@ from app.retriever import search_relevant_documents
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(PROJECT_ROOT / ".env")
 
-MAX_DISTANCE = 1.4
+MAX_DISTANCE = 1.2
+
 
 def get_rag_chain():
 
@@ -25,15 +26,18 @@ def get_rag_chain():
 
     Answer the user's question using ONLY the policy context below.
 
-    Rules:
-    1. Do not invent policy information.
-    2. If the context does not contain the answer, clearly say
-       that the available policy documents do not contain it.
-    3. Explain the relevant procedure clearly.
-    4. Mention the policy document ID when available.
-    5. These documents are fictional training policies.
-       Never present them as actual bank policies.
-
+   Rules:
+1. Answer using ONLY facts explicitly stated in the policy context.
+2. Never invent, assume, or infer additional banking procedures.
+3. Do not add explanations of how a process works unless the
+   policy explicitly describes them.
+4. If a detail is missing, clearly state that the policy
+   does not specify it.
+5. Explain the relevant procedure clearly.
+6. Mention the policy document ID when available.
+7. These documents are fictional training policies.
+   Never present them as actual bank policies.
+   
     POLICY CONTEXT:
     {context}
 
@@ -44,15 +48,24 @@ def get_rag_chain():
     """)
 
     def format_documents(documents):
-        return "\n\n".join(
-            f"Source: {doc.metadata.get('source', 'Unknown')}\n"
-            f"{doc.page_content}"
-            for doc, distance in documents
-        )
+
+        formatted = []
+
+        for doc, distance in documents:
+            metadata = doc.metadata
+
+            formatted.append(
+                f"Policy ID: {metadata.get('policy_id', 'Unknown')}\n"
+                f"Policy Name: {metadata.get('policy_name', 'Unknown')}\n"
+                f"Section: {metadata.get('section', 'Unknown')}\n"
+                f"Source File: {metadata.get('source_file', 'Unknown')}\n"
+                f"Content:\n{doc.page_content}"
+            )
+
+        return "\n\n".join(formatted)
 
     def answer_question(question):
 
-        # Retrieve documents with their similarity distances
         results = search_relevant_documents(
             question,
             k=3,
@@ -61,7 +74,6 @@ def get_rag_chain():
 
         print(f"\nRelevant documents found: {len(results)}")
 
-        # No relevant documents: do not call the LLM
         if not results:
             return {
                 "answer": (
@@ -70,9 +82,6 @@ def get_rag_chain():
                 ),
                 "sources": []
             }
-
-        # Extract documents from the (document, distance) tuples
-        documents = [doc for doc, distance in results]
 
         context = format_documents(results)
 
@@ -83,9 +92,26 @@ def get_rag_chain():
             "question": question
         })
 
+        # Extract structured source information
+        sources = []
+
+        for doc, distance in results:
+            metadata = doc.metadata
+
+            source = {
+                "policy_id": metadata.get("policy_id", "Unknown"),
+                "policy_name": metadata.get("policy_name", "Unknown"),
+                "section": metadata.get("section", "Unknown"),
+                "source_file": metadata.get("source_file", "Unknown"),
+                "distance": round(float(distance), 4)
+            }
+
+            if source not in sources:
+                sources.append(source)
+
         return {
             "answer": answer,
-            "sources": documents
+            "sources": sources
         }
 
     return answer_question
@@ -112,4 +138,10 @@ if __name__ == "__main__":
         print("\nSOURCES:")
 
         for source in result["sources"]:
-            print("-", source.metadata.get("source"))
+            print(
+                f"- {source['policy_id']} | "
+                f"{source['policy_name']} | "
+                f"{source['section']} | "
+                f"{source['source_file']} | "
+                f"Distance: {source['distance']}"
+            )

@@ -1,95 +1,70 @@
 
 import json
 from decimal import Decimal
-from app.retriever import get_retriever
+
 from langchain_core.tools import tool
 
-from app.data_loader import (
-    find_customer,
-    find_transactions
-)
+from app.data_loader import find_customer, find_transactions
+from app.retriever import search_relevant_documents
 
 
 @tool
 def get_customer_profile(customer_id: str) -> str:
-    """Retrieve customer name, city and account type using customer ID."""
+    """Retrieve a customer's profile using their customer ID."""
 
     customer = find_customer(customer_id)
 
     if not customer:
-        return json.dumps({
-            "error": "Customer not found",
-            "customer_id": customer_id
-        })
+        return f"Customer {customer_id} was not found."
 
-    return json.dumps(customer)
+    return json.dumps(customer, ensure_ascii=False)
 
 
 @tool
 def get_customer_transactions(customer_id: str) -> str:
-    """Retrieve all transaction records for a customer ID."""
+    """Retrieve all transactions belonging to a customer."""
 
-    customer = find_customer(customer_id)
+    transactions = find_transactions(customer_id)
 
-    if not customer:
-        return json.dumps({
-            "error": "Customer not found",
-            "customer_id": customer_id
-        })
+    if not transactions:
+        return f"No transactions found for customer {customer_id}."
 
-    records = find_transactions(customer_id)
-
-    return json.dumps({
-        "customer_id": customer_id,
-        "transaction_count": len(records),
-        "transactions": records
-    })
+    return json.dumps(transactions, ensure_ascii=False)
 
 
 @tool
 def get_customer_metrics(customer_id: str) -> str:
-    """Calculate debit, credit, net transaction flow and transaction count."""
+    """Calculate debit, credit and net transaction flow for a customer."""
 
-    customer = find_customer(customer_id)
+    transactions = find_transactions(customer_id)
 
-    if not customer:
-        return json.dumps({
-            "error": "Customer not found",
-            "customer_id": customer_id
-        })
+    if not transactions:
+        return f"No transactions found for customer {customer_id}."
 
-    records = find_transactions(customer_id)
+    total_debit = Decimal("0")
+    total_credit = Decimal("0")
 
-    debit = sum(
-        (
-            Decimal(t["amount"])
-            for t in records
-            if t["transaction_type"].lower() == "debit"
-        ),
-        Decimal("0")
-    )
+    for transaction in transactions:
+        amount = Decimal(transaction["amount"])
 
-    credit = sum(
-        (
-            Decimal(t["amount"])
-            for t in records
-            if t["transaction_type"].lower() == "credit"
-        ),
-        Decimal("0")
-    )
+        if transaction["transaction_type"].lower() == "debit":
+            total_debit += amount
 
-    return json.dumps({
+        elif transaction["transaction_type"].lower() == "credit":
+            total_credit += amount
+
+    net_flow = total_credit - total_debit
+
+    metrics = {
         "customer_id": customer_id,
-        "transaction_count": len(records),
-        "total_debit_inr": str(debit),
-        "total_credit_inr": str(credit),
-        "net_transaction_flow_inr": str(credit - debit)
-    })
-from langchain_core.tools import tool
+        "total_debit": str(total_debit),
+        "total_credit": str(total_credit),
+        "net_transaction_flow": str(net_flow),
+        "transaction_count": len(transactions),
+        "currency": "INR"
+    }
 
-
-
-from app.retriever import search_relevant_documents
+    return json.dumps(metrics, ensure_ascii=False)
 
 
 @tool
@@ -97,77 +72,51 @@ def search_banking_policies(question: str) -> str:
     """
     Search fictional banking policy documents for information
     about card disputes, refunds and transaction security.
+    Returns relevant policy evidence and source metadata.
     """
 
     results = search_relevant_documents(
-    question,
-    k=3,
-    max_distance=1.3
-
+        question,
+        k=3,
+        max_distance=1.2
     )
 
     if not results:
-        return (
-            "NO_RELEVANT_POLICY_FOUND: "
-            "The available policy documents do not contain "
-            "sufficiently relevant information to answer this question."
-        )
+        return json.dumps({
+            "status": "NO_RELEVANT_POLICY_FOUND",
+            "message": (
+                "The available policy documents do not contain "
+                "sufficiently relevant information to answer this question."
+            ),
+            "sources": [],
+            "evidence": []
+        })
 
-    
-    formatted_results = []
+    evidence = []
+    sources = []
 
     for document, distance in results:
+        metadata = document.metadata
 
-        content = document.page_content
+        source = {
+            "policy_id": metadata.get("policy_id", "Unknown"),
+            "policy_name": metadata.get("policy_name", "Unknown"),
+            "version": metadata.get("version", "Unknown"),
+            "section": metadata.get("section", "Unknown"),
+            "source_file": metadata.get("source_file", "Unknown"),
+            "distance": round(float(distance), 4)
+        }
 
-        # Extract document metadata from the policy text
-        lines = content.splitlines()
+        evidence.append({
+            **source,
+            "content": document.page_content
+        })
 
-        policy_id = "Unknown"
-        version = "Unknown"
-        title = "Unknown Policy"
+        if source not in sources:
+            sources.append(source)
 
-        for line in lines:
-
-            if line.startswith("DOCUMENT ID:"):
-                policy_id = line.split(":", 1)[1].strip()
-
-            elif line.startswith("VERSION:"):
-                version = line.split(":", 1)[1].strip()
-
-            elif line.startswith("DOCUMENT:"):
-                title = line.split(":", 1)[1].strip()
-
-        # Some chunks don't contain the document header.
-        # Read the original source file to obtain metadata.
-        if "Unknown" in [policy_id, version, title]:
-
-            source = document.metadata.get("source", "")
-
-            try:
-                with open(source, "r", encoding="utf-8") as file:
-                    full_content = file.read()
-
-                for line in full_content.splitlines():
-
-                    if line.startswith("DOCUMENT ID:"):
-                        policy_id = line.split(":", 1)[1].strip()
-
-                    elif line.startswith("VERSION:"):
-                        version = line.split(":", 1)[1].strip()
-
-                    elif line.startswith("DOCUMENT:"):
-                        title = line.split(":", 1)[1].strip()
-
-            except OSError:
-                pass
-
-        formatted_results.append(
-            f"Policy: {title}\n"
-            f"Policy ID: {policy_id}\n"
-            f"Version: {version}\n"
-            f"Distance: {distance:.4f}\n"
-            f"Evidence:\n{content}"
-        )
-
-    return "\n\n".join(formatted_results)
+    return json.dumps({
+        "status": "SUCCESS",
+        "sources": sources,
+        "evidence": evidence
+    }, ensure_ascii=False)

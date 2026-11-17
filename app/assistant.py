@@ -1,4 +1,4 @@
-
+import json 
 from langchain_core.messages import (
     SystemMessage,
     HumanMessage,
@@ -66,7 +66,7 @@ Rules:
 
 28. Do not include customer-specific personal details
     in policy search queries unless they are necessary.
-    
+
 CONVERSATION MEMORY RULES:
 24. Use previous messages to understand references such as
     "he", "she", "they", "that customer" and "their transactions".
@@ -82,23 +82,44 @@ CONVERSATION MEMORY RULES:
 """)
 
 
+
 def ask_bankmate(question, session_id="default"):
 
     if session_id not in conversation_sessions:
         conversation_sessions[session_id] = [system_message]
 
     messages = conversation_sessions[session_id]
+    collected_policy_sources = []
 
     messages.append(HumanMessage(content=question))
 
     for step in range(5):
 
         response = model.invoke(messages)
-
         messages.append(response)
 
         if not response.tool_calls:
-            return response.content
+
+            final_answer = str(response.content)
+
+            if collected_policy_sources:
+                citation_lines = []
+
+                for source in collected_policy_sources:
+                    citation = (
+                        f"- {source.get('policy_id', 'Unknown')}: "
+                        f"{source.get('policy_name', 'Unknown')} | "
+                        f"Section: {source.get('section', 'Unknown')} | "
+                        f"File: {source.get('source_file', 'Unknown')}"
+                    )
+                    citation_lines.append(citation)
+
+                final_answer += (
+                    "\n\nSources (fictional BankMate training policies):\n"
+                    + "\n".join(citation_lines)
+                )
+
+            return final_answer
 
         for call in response.tool_calls:
 
@@ -112,8 +133,38 @@ def ask_bankmate(question, session_id="default"):
 
             if selected_tool is None:
                 result = '{"error": "Unknown tool"}'
+
             else:
                 result = selected_tool.invoke(tool_args)
+
+                if tool_name == "search_banking_policies":
+                    try:
+                        policy_data = json.loads(result)
+
+                        if policy_data.get("status") == "SUCCESS":
+
+                            for source in policy_data.get("sources", []):
+
+                                source_key = (
+                                    source.get("policy_id"),
+                                    source.get("section"),
+                                    source.get("source_file")
+                                )
+
+                                existing_keys = [
+                                    (
+                                        item.get("policy_id"),
+                                        item.get("section"),
+                                        item.get("source_file")
+                                    )
+                                    for item in collected_policy_sources
+                                ]
+
+                                if source_key not in existing_keys:
+                                    collected_policy_sources.append(source)
+
+                    except (json.JSONDecodeError, TypeError):
+                        pass
 
             messages.append(
                 ToolMessage(

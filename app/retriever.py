@@ -120,16 +120,17 @@ if __name__ == "__main__":
             print("Source:", document.metadata.get("source"))
             print("Content:", document.page_content[:300])
 
-print("\nSECTION FILTERING TEST")
 
-results = search_by_policy(
-    question="What happens when a refund is approved?",
-    policy_id="POL-002",
-    section="PROCESSING",
-    k=3
-)
+    print("\nSECTION FILTERING TEST")
 
-for doc in results:
-    print("\nPolicy:", doc.metadata["policy_id"])
-    print("Section:", doc.metadata["section"])
-    print("Content:", doc.page_content)
+    results = search_by_policy(
+        question="What happens when a refund is approved?",
+        policy_id="POL-002",
+        section="PROCESSING",
+        k=3
+    )
+
+    for doc in results:
+        print("\nPolicy:", doc.metadata["policy_id"])
+        print("Section:", doc.metadata["section"])
+        print("Content:", doc.page_content)

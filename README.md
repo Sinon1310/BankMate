@@ -1,314 +1,195 @@
-# BankMate — Banking Customer Intelligence Assistant
+# BankMate — AI Banking Copilot
 
-A conversational banking intelligence assistant built with **LangChain, Groq, and Retrieval-Augmented Generation (RAG)**. BankMate combines structured customer data, transaction analytics, conversational memory, and policy-document retrieval to answer banking-related queries through a single natural-language interface.
+A conversational banking assistant built with **LangChain, Groq and Retrieval-Augmented Generation (RAG)**. BankMate answers questions about customers, transaction activity and bank procedures by calling tools over structured data and retrieving evidence from policy documents. Every policy answer cites the documents it relied on, and those citations are validated against what was actually retrieved.
 
-> **Project status:** Active development  
-> **Data:** Synthetic customer and transaction data; fictional banking policies
+> **Status:** Active development
+> **Data:** Synthetic customer and transaction records; fictional banking policies
+
+<p align="center">
+  <img src="docs/screenshots/home.png" alt="BankMate home page with conversational entry point, suggested prompts and capability overview" width="100%">
+</p>
 
 ---
 
-## Overview
+## Highlights
 
-BankMate demonstrates how Large Language Models can interact with structured banking data and unstructured policy documents through a modular tool-based architecture.
+- **Web app** — a Streamlit workspace with a home page, a multi-conversation AI assistant, responsive layouts and a consistent design system.
+- **Tool calling** — the model retrieves customer profiles and transactions and computes debit, credit and net transaction flow in Python rather than estimating figures.
+- **RAG over policy documents** — section-aware chunking, Sentence Transformer embeddings and ChromaDB retrieval with a similarity-distance threshold.
+- **Validated citations** — the model declares which policies it used; BankMate keeps only IDs that were actually retrieved in that turn, and shows no sources when an answer isn't supported by the policies.
+- **Grounding check** — contact channels (phone, chat, branch, email, app…) that don't appear in the retrieved evidence trigger a revision before the answer is shown.
+- **Isolated conversation memory** — follow-ups such as "what was *his* total debit?" resolve within a conversation; separate conversations never share context.
+- **Tested** — offline pytest suite with fake models and tools, plus Streamlit `AppTest` UI tests. No API key needed to run it.
 
-Instead of relying on an LLM to generate every answer, BankMate uses dedicated tools to retrieve customer records, calculate transaction metrics, and search relevant policy documents. This helps keep responses grounded in available data and supporting evidence.
+## Screenshots
 
-## Key Features
-
-- **Conversational AI:** Interact with banking data using natural-language questions.
-- **LLM Tool Calling:** The assistant dynamically selects tools based on the user's request.
-- **Customer Intelligence:** Retrieve customer profiles and transaction histories.
-- **Transaction Analytics:** Calculate debit totals, credit totals, and net transaction flow.
-- **Retrieval-Augmented Generation (RAG):** Retrieve relevant information from banking policy documents before generating responses.
-- **Semantic Search:** Generate embeddings using Sentence Transformers and store document vectors in ChromaDB.
-- **Conversation Memory:** Maintain customer context across follow-up questions within a session.
-- **Grounded Responses:** Handle questions outside the available knowledge base without inventing unsupported information.
-- **Modular Architecture:** Separate data access, tools, LLM configuration, retrieval, and assistant orchestration.
+| AI Assistant with validated sources | Mobile |
+|---|---|
+| <img src="docs/screenshots/assistant.png" alt="Assistant conversation with a follow-up question and two cited policies" width="100%"> | <img src="docs/screenshots/mobile.png" alt="Assistant answer with a cited refund policy on a mobile screen" width="260"> |
 
 ## Architecture
 
 ```mermaid
 flowchart TD
-    A[User] --> B[BankMate Assistant]
-    B --> C[Conversation Memory]
-    C --> D[Groq LLM]
-    D --> E{Tool Selection}
+    U[User] --> UI[Streamlit web app<br/>or terminal CLI]
+    UI --> A[Assistant orchestration<br/>per-conversation memory]
+    A --> L[Groq LLM]
+    L --> T{Tool selection}
 
-    E --> F[Customer Data Tools]
-    E --> G[Banking Policy Search]
+    T --> C[Customer tools]
+    T --> P[Policy search]
 
-    F --> H[Customer and Transaction CSVs]
-    F --> I[Transaction Metrics]
+    C --> D[(Customer & transaction CSVs)]
+    P --> R[Retriever]
+    R --> V[(ChromaDB)]
+    V --> E[MiniLM embeddings]
+    V --> K[Fictional policy documents]
 
-    G --> J[Document Retrieval]
-    J --> K[ChromaDB Vector Store]
-    K --> L[Sentence Transformer Embeddings]
-    K --> M[Fictional Banking Policy Documents]
-
-    H --> N[Tool Results]
-    I --> N
-    J --> N
-    N --> D
-    D --> O[Grounded Natural-Language Response]
+    C --> A
+    P --> A
+    A --> G[Grounding check<br/>unsupported channels]
+    G --> S[Citation validation<br/>declared ∩ retrieved]
+    S --> UI
 ```
 
-## Technology Stack
+### Answer pipeline
 
-| Category | Technologies |
+1. The model chooses tools; customer tools read the CSVs, and `search_banking_policies` retrieves policy chunks within a distance threshold.
+2. For policy answers, the model ends its reply with `CITED_POLICIES: POL-xxx` or `CITED_POLICIES: NONE`.
+3. **Grounding check** (`app/grounding.py`): contact channels named in the answer are compared with the retrieved evidence and customer data. Unsupported ones trigger one revision; remaining example lists are removed without deleting whole sentences.
+4. **Citation validation** (`app/citations.py`): declared IDs are intersected with the sources retrieved in that turn. A missing marker or `NONE` yields no sources (fail closed), so fabricated or unused policies are never shown.
+5. The UI renders the answer and policy-level sources with the fictional-policy disclaimer.
+
+## Technology stack
+
+| Area | Technology |
 |---|---|
-| Programming Language | Python |
-| LLM Framework | LangChain |
-| LLM Provider | Groq |
-| Language Model | `openai/gpt-oss-20b` |
-| Embedding Model | `sentence-transformers/all-MiniLM-L6-v2` |
-| Vector Database | ChromaDB |
-| Embedding Integration | LangChain Hugging Face |
-| Data Processing | Python, CSV |
-| Environment Management | Python Virtual Environment, python-dotenv |
-| Development Environment | VS Code |
+| Language | Python 3.9+ |
+| LLM orchestration | LangChain |
+| LLM provider / model | Groq · `openai/gpt-oss-20b` |
+| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` (local, CPU) |
+| Vector store | ChromaDB (persisted locally) |
+| Web interface | Streamlit (multipage navigation, custom theme) |
+| Testing | pytest · Streamlit `AppTest` |
 
-## Project Structure
+## Project structure
 
 ```text
 BankMate/
-│
-├── app/
-│   ├── __init__.py
-│   ├── assistant.py          # Assistant orchestration and conversation memory
-│   ├── data_loader.py        # Customer and transaction data loading
-│   ├── tools.py              # LangChain tools for banking operations
-│   ├── llm.py                # Groq model and tool configuration
-│   ├── document_loader.py    # Policy document loading and chunking
-│   ├── embeddings.py         # Hugging Face embedding configuration
-│   ├── vector_store.py       # ChromaDB creation and persistence
-│   ├── retriever.py          # Semantic document retrieval
-│   └── rag_chain.py          # Retrieval-augmented question answering
-│
-├── data/
-│   ├── customers.csv
-│   ├── transactions.csv
-│   └── rag_evaluation.csv
-│
-├── knowledge/
-│   └── policies/
-│       ├── card_dispute_policy.txt
-│       ├── refund_policy.txt
-│       └── transaction_security_policy.txt
-│
-├── chroma_db/                # Locally generated vector database
-│
-├── main.py                   # Application entry point
+├── app/                       # Backend (UI-independent)
+│   ├── assistant.py           # Tool-calling loop, system prompt, per-session memory
+│   ├── citations.py           # Citation parsing, validation and formatting
+│   ├── grounding.py           # Unsupported contact-channel detection and cleanup
+│   ├── tools.py               # LangChain tools: profiles, transactions, metrics, policy search
+│   ├── llm.py                 # Groq model and tool binding
+│   ├── data_loader.py         # CSV loading
+│   ├── document_loader.py     # Policy loading and section-aware chunking
+│   ├── embeddings.py          # Embedding model configuration
+│   ├── vector_store.py        # Builds the ChromaDB collection
+│   ├── retriever.py           # Similarity search with distance filtering
+│   ├── rag_chain.py           # Standalone single-shot RAG chain
+│   ├── evaluate_rag.py        # Retrieval evaluation (Recall@3, Precision@3, false positives)
+│   └── compare_retrieval.py   # Similarity vs MMR comparison
+├── ui/                        # Streamlit frontend
+│   ├── theme.py               # Design tokens and scoped CSS
+│   ├── components.py          # Reusable UI components
+│   ├── navigation.py          # Page registry (only implemented pages)
+│   ├── state.py               # Conversation store and cross-page prompt hand-off
+│   ├── assets/                # Logo
+│   └── views/                 # home.py, assistant.py
+├── tests/                     # Offline backend and UI tests
+├── data/                      # Synthetic customers, transactions, RAG evaluation set
+├── knowledge/policies/        # Fictional policy documents
+├── docs/screenshots/
+├── .streamlit/config.toml     # Theme
+├── streamlit_app.py           # Web app entry point
+├── main.py                    # Terminal chat entry point
 ├── requirements.txt
-├── .env.example
-├── .gitignore
-└── README.md
+└── requirements-dev.txt
 ```
 
-## How It Works
-
-### 1. Structured Customer Data
-
-BankMate reads customer and transaction records from CSV files.
-
-The customer dataset contains sample customer profiles, while the transaction dataset contains transaction identifiers, dates, types, amounts, and merchant information.
-
-Dedicated tools provide:
-
-- Customer profile retrieval
-- Customer transaction history
-- Total debit and credit calculations
-- Net transaction flow
-
-### 2. LLM Tool Calling
-
-The assistant uses LangChain tool calling to determine which operation is required.
-
-For example:
-
-| User Query | Tool |
-|---|---|
-| Show customer C101's profile | `get_customer_profile` |
-| Show transaction history | `get_customer_transactions` |
-| Calculate total debit | `get_customer_metrics` |
-| Explain the dispute procedure | `search_banking_policies` |
-
-The LLM interprets the request, invokes the relevant tool, and uses the returned result to formulate its response.
-
-### 3. Retrieval-Augmented Generation
-
-BankMate uses RAG to answer questions about banking procedures.
-
-The document retrieval pipeline:
-
-1. Loads policy documents from the knowledge directory.
-2. Splits documents into smaller chunks.
-3. Generates vector embeddings using `all-MiniLM-L6-v2`.
-4. Stores the embeddings in ChromaDB.
-5. Retrieves relevant policy chunks using semantic similarity.
-6. Supplies retrieved evidence to the LLM to generate a response.
-
-This allows the assistant to answer questions using the available policy documents rather than relying entirely on the model's pretrained knowledge.
-
-### 4. Conversational Memory
-
-BankMate maintains conversation history within an active application session.
-
-For example:
-
-```text
-User: Show me the profile of customer C101.
-
-BankMate: Customer C101 is Arjun Mehta from Mumbai.
-
-User: Show me his transaction history.
-
-BankMate: Retrieves the transaction history for C101.
-
-User: What was his total debit amount?
-
-BankMate: The total debit amount is ₹9,000.
-```
-
-The assistant resolves follow-up references using the conversation context and retrieves fresh data when required.
-
-## Getting Started
+## Getting started
 
 ### Prerequisites
 
-- Python 3.9 or a compatible Python environment
-- Git
-- VS Code or another Python IDE
-- A Groq API key
+- Python 3.9 or later
+- A [Groq API key](https://console.groq.com/)
 
-### 1. Clone the Repository
+### Setup
 
 ```bash
 git clone https://github.com/Sinon1310/BankMate.git
 cd BankMate
-```
 
-### 2. Create a Virtual Environment
-
-```bash
 python3 -m venv .venv
 source .venv/bin/activate
-```
 
-### 3. Install Dependencies
-
-```bash
 pip install -r requirements.txt
+cp .env.example .env            # then set GROQ_API_KEY in .env
 ```
 
-### 4. Configure Environment Variables
-
-Create your local environment file:
-
-```bash
-cp .env.example .env
-```
-
-Add your Groq API key to `.env`:
-
-```env
-GROQ_API_KEY=your_groq_api_key
-```
-
-Never commit your `.env` file or expose API credentials.
-
-### 5. Build the Vector Store
-
-Generate embeddings and persist the policy documents in ChromaDB:
+Build the policy vector store (re-run only when policy documents or chunking change):
 
 ```bash
 python -m app.vector_store
 ```
 
-Run this again whenever you intentionally rebuild the policy knowledge base.
-
-### 6. Start BankMate
+### Run the web app
 
 ```bash
-python main.py
+streamlit run streamlit_app.py
 ```
 
-Ask questions about the sample customers, their transactions, or the available policy documents.
+Open http://localhost:8501. If `GROQ_API_KEY` is missing, the home page still loads and the assistant shows an "unavailable" state instead of failing.
 
-Type `exit` to close the application.
+### Run the terminal chat
 
-## Sample Queries
+```bash
+python main.py                  # type 'exit' to quit
+```
+
+## Example questions
 
 ```text
 Show me the profile of customer C101.
-
-Show me his transaction history.
-
 What was his total debit amount?
-
-What should a customer do after noticing an unauthorized transaction?
-
-What information is required to raise a card dispute?
-
+What should a customer do about an unauthorized transaction?
+What information is needed to raise a card dispute?
 How are refunds handled for duplicate transactions?
-
-What is the bank's home loan interest rate?
+What is the bank's home loan interest rate?     ← not covered: answered without sources
 ```
 
-For questions unsupported by the available policy documents, BankMate is designed to acknowledge that the information is unavailable rather than fabricate an answer.
+## Testing and evaluation
 
-## RAG Evaluation Dataset
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
 
-The project includes `data/rag_evaluation.csv`, a collection of test questions mapped to expected policy document identifiers.
+The suite runs offline: the assistant is exercised with scripted fake models and tools, and UI flows run through Streamlit's `AppTest` with a fake backend. It covers citation selection, duplicate and missing metadata, unsupported questions, grounding and cleanup, conversation isolation, retry and unavailable states.
 
-It covers:
+Retrieval quality is measured separately against `data/rag_evaluation.csv` (uses the local ChromaDB store, no LLM calls):
 
-- Card dispute procedures
-- Refund processing
-- Transaction security
-- Questions outside the available policy knowledge base
+```bash
+python -m app.evaluate_rag          # Recall@3, Precision@3, false-positive rate
+python -m app.compare_retrieval     # Similarity vs MMR
+```
 
-This dataset provides a foundation for evaluating document retrieval quality and identifying irrelevant retrievals and false negatives.
+## Scope and limitations
 
-## Current Scope and Limitations
+BankMate is an educational and portfolio project. It uses synthetic data and fictional policy documents and is not connected to any banking system. It must not be used with real customer information or financial transactions.
 
-BankMate is an educational and portfolio project using synthetic data and fictional policy documents.
+- Customer and transaction data are CSV files; conversation memory is in-process and resets when the app restarts.
+- Citations are policy-level; the model does not report which sections it relied on.
+- The grounding check targets contact channels; other procedural details rely on prompt instructions.
 
-Current implementation:
+## Roadmap
 
-- CSV-based customer and transaction data
-- Local ChromaDB persistence
-- Local sentence-transformer embeddings
-- In-memory conversational session history
-- Groq-hosted language model
-- Basic semantic retrieval with a configurable similarity-distance threshold
-
-It is not connected to a real banking core system, customer account, payment gateway, or production banking infrastructure. It should not be used to process real customer information or financial transactions.
-
-## Future Enhancements
-
-- Automated RAG evaluation using Precision@K and Recall@K
-- Improved retrieval quality and relevance filtering
-- Conversation persistence and session management
-- Structured database integration
-- API layer using FastAPI
-- Improved observability, logging, and error handling
-- Automated testing and evaluation pipelines
-- Production-oriented deployment architecture
-
-## Learning Outcomes
-
-This project explores practical applications of:
-
-- LLM orchestration and tool calling
-- Retrieval-Augmented Generation
-- Semantic search and vector embeddings
-- Vector database integration
-- Context-aware conversational systems
-- Structured and unstructured data integration
-- Modular Python application architecture
+- Customer Explorer and Transaction Analytics pages
+- Policy Intelligence page with document browsing and retrieval search
+- Persistent conversations and structured database storage
+- API layer and deployment configuration
 
 ---
 
 **Developed by [Sinon Christopher Rodrigues](https://github.com/Sinon1310)**
-
-[GitHub Repository](https://github.com/Sinon1310/BankMate)

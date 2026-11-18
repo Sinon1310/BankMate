@@ -2,7 +2,8 @@
 import uuid
 import streamlit as st
 
-from app.assistant import ask_bankmate
+from app.assistant import ask_bankmate_with_sources
+from app.citations import format_citation
 
 
 # =========================================================
@@ -470,27 +471,21 @@ if not st.session_state.messages:
 # RESPONSE RENDERER
 # =========================================================
 
-def render_assistant_response(response):
-
-    source_header = "Sources (fictional BankMate training policies):"
-
-    answer, separator, source_text = response.partition(source_header)
+def render_assistant_response(answer, sources=None):
 
     st.markdown(answer.strip())
 
-    if separator and source_text.strip():
+    if sources:
 
         with st.expander("📚  Supporting policy references"):
 
             st.caption(
-                "Retrieved fictional training documents supporting this answer."
+                "Sources (fictional BankMate training policies) "
+                "cited in this answer."
             )
 
-            for line in source_text.strip().splitlines():
-                line = line.strip()
-
-                if line.startswith("- "):
-                    st.markdown(f"- {line[2:]}")
+            for citation in sources:
+                st.markdown(f"- {format_citation(citation)}")
 
 
 # =========================================================
@@ -507,7 +502,10 @@ for message in st.session_state.messages:
     with st.chat_message(message["role"], avatar=avatar):
 
         if message["role"] == "assistant":
-            render_assistant_response(message["content"])
+            render_assistant_response(
+                message["content"],
+                message.get("sources")
+            )
         else:
             st.markdown(message["content"])
 
@@ -540,16 +538,20 @@ if prompt:
 
             try:
 
-                response = ask_bankmate(
+                result = ask_bankmate_with_sources(
                     prompt,
                     session_id=st.session_state.session_id
                 )
 
-                render_assistant_response(response)
+                render_assistant_response(
+                    result["answer"],
+                    result["sources"]
+                )
 
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": response
+                    "content": result["answer"],
+                    "sources": result["sources"]
                 })
 
             except Exception:

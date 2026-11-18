@@ -416,7 +416,6 @@ __VARIABLES__
   font-size: 1.5rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
   color: var(--bm-text);
 }
 
@@ -770,6 +769,331 @@ __VARIABLES__
   font-weight: 600;
 }
 
+/* ---------- Panels (keyed containers: st-key-bm-panel-*) ---------- */
+
+[class*="st-key-bm-panel"] {
+  background: var(--bm-surface);
+  border: 1px solid var(--bm-border) !important;
+  border-radius: var(--bm-radius-lg) !important;
+  box-shadow: var(--bm-shadow-sm);
+  padding: 1.125rem 1.25rem 1.25rem !important;
+}
+
+.bm-panel-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--bm-text);
+}
+
+.bm-panel-subtitle {
+  margin-top: 0.125rem;
+  font-size: 0.8125rem;
+  color: var(--bm-text-faint);
+}
+
+.st-key-bm-panel-net,
+.st-key-bm-panel-merchants,
+.st-key-bm-panel-daily {
+  margin-top: 0.25rem;
+}
+
+.st-key-bm-panel-filters {
+  padding: 0.875rem 1.25rem 1rem !important;
+  margin-bottom: 1.25rem;
+}
+
+/* ---------- KPI tiles ---------- */
+
+.bm-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--bm-border);
+  border-radius: var(--bm-radius-lg);
+  background: var(--bm-border);
+  overflow: hidden;
+}
+
+.bm-kpi {
+  padding: 1rem 1.25rem 1.05rem;
+  background: var(--bm-surface);
+}
+
+.bm-kpi-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--bm-text-muted);
+}
+
+/* Proportional figures for standalone values (not tabular). */
+.bm-kpi-value {
+  margin-top: 0.375rem;
+  font-family: "Inter Tight", Inter, sans-serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--bm-text);
+}
+
+.bm-kpi-note {
+  margin-top: 0.125rem;
+  font-size: 0.78rem;
+  color: var(--bm-text-faint);
+}
+
+.bm-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.bm-swatch-credit { background: var(--bm-credit); }
+.bm-swatch-debit { background: var(--bm-debit); }
+.bm-swatch-primary { background: var(--bm-primary); }
+
+/* ---------- Callout ---------- */
+
+.bm-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1.25rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--bm-text-muted);
+}
+
+.bm-callout .bm-icon {
+  font-size: 17px;
+  margin-top: 0.05rem;
+  color: var(--bm-text-faint);
+}
+
+/* ---------- Empty state ---------- */
+
+.bm-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+}
+
+.bm-empty-title {
+  margin-top: 0.75rem;
+  font-weight: 600;
+  color: var(--bm-text);
+}
+
+.bm-empty-body {
+  max-width: 26rem;
+  margin: 0.25rem auto 0 !important;
+  font-size: 0.875rem;
+  color: var(--bm-text-muted);
+}
+
+/* ---------- Transactions table ---------- */
+
+.bm-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--bm-border);
+  border-radius: var(--bm-radius-lg);
+  background: var(--bm-surface);
+}
+
+.bm-table {
+  width: 100%;
+  margin: 0 !important;
+  border: none !important;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.bm-table caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.bm-table th {
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid var(--bm-border);
+  background: var(--bm-surface-subtle);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+  color: var(--bm-text-faint);
+  white-space: nowrap;
+}
+
+.bm-table th,
+.bm-table td {
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+}
+
+.bm-table td {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--bm-border);
+  color: var(--bm-text);
+  vertical-align: middle;
+}
+
+.bm-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.bm-table tbody tr:hover td {
+  background: #FBFAF7;
+}
+
+.bm-table .bm-right { text-align: right; }
+.bm-table .bm-num { font-variant-numeric: tabular-nums; }
+.bm-table .bm-nowrap { white-space: nowrap; }
+.bm-muted { color: var(--bm-text-faint); }
+
+.bm-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem 0.125rem 0.375rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--bm-text);
+  white-space: nowrap;
+}
+
+.bm-type .bm-icon { font-size: 15px; }
+.bm-type-credit { background: var(--bm-credit-soft); }
+.bm-type-credit .bm-icon { color: var(--bm-credit); }
+.bm-type-debit { background: var(--bm-debit-soft); }
+.bm-type-debit .bm-icon { color: var(--bm-debit); }
+
+/* ---------- Customer Explorer ---------- */
+
+.st-key-bm-panel-customer-list {
+  gap: 0.25rem !important;
+}
+
+/* Streamlit pulls markdown up by -1rem, which let the first list row
+   overlap this label. */
+[data-testid="stMarkdownContainer"]:has(> .bm-list-meta),
+[data-testid="stMarkdownContainer"]:has(.bm-list-meta) {
+  margin-bottom: 0 !important;
+}
+
+.bm-list-meta {
+  display: block;
+  margin: 0 0.25rem 0.25rem;
+  padding-top: 0.75rem;
+  line-height: 1.4;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bm-text-faint);
+}
+
+[class*="st-key-bm-cust"] button {
+  justify-content: flex-start;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--bm-radius-sm);
+  color: var(--bm-text-muted);
+  transition: background-color 150ms ease;
+}
+
+[class*="st-key-bm-cust"] button:hover {
+  background: var(--bm-surface-subtle);
+  color: var(--bm-text);
+}
+
+[class*="st-key-bm-cust"] button p {
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.st-key-bm-cust-active button,
+.st-key-bm-cust-active button:disabled {
+  background: var(--bm-primary-soft);
+  color: var(--bm-primary) !important;
+  opacity: 1;
+  cursor: default;
+}
+
+.st-key-bm-cust-active button p {
+  font-weight: 600;
+}
+
+.bm-profile {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.bm-avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 14px;
+  background: var(--bm-text);
+  color: #FFFFFF;
+  font-family: "Inter Tight", Inter, sans-serif;
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.bm-profile-name {
+  font-family: "Inter Tight", Inter, sans-serif;
+  font-size: 1.375rem;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--bm-text);
+}
+
+.bm-profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--bm-text-muted);
+}
+
+.bm-profile-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.bm-profile-meta .bm-icon {
+  font-size: 16px;
+  color: var(--bm-text-faint);
+}
+
+.st-key-bm-panel-profile {
+  margin-bottom: 1rem;
+  gap: 1rem !important;
+}
+
+@media (max-width: 1100px) {
+  .bm-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 /* ---------- Mobile navigation (hidden on desktop) ---------- */
 
 .st-key-bm-mobile-nav {
@@ -835,6 +1159,25 @@ __VARIABLES__
 
   .bm-stats {
     grid-template-columns: 1fr 1fr;
+  }
+
+  /* Secondary columns (IDs) drop on phones; the date, merchant, type
+     and amount stay, and IDs remain on the Customer Explorer. */
+  .bm-table .bm-col-secondary {
+    display: none;
+  }
+
+  /* With several columns on a phone, the signed amount (+ credit,
+     − debit) carries the direction in text, so the Type badge drops
+     only where a Customer column also needs the room. */
+  .bm-table-wide .bm-col-type {
+    display: none;
+  }
+
+  .bm-table th,
+  .bm-table td {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
   }
 
   .st-key-bm-chiprow > [data-testid="stLayoutWrapper"] {

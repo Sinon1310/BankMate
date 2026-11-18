@@ -108,7 +108,7 @@ def mobile_nav(current_title):
             with st.container(key=key):
                 st.page_link(
                     page["path"],
-                    label=page["title"],
+                    label=page.get("short", page["title"]),
                     icon=page["icon"],
                     disabled=is_current,
                 )
@@ -197,4 +197,117 @@ def thinking_indicator():
         "<span></span><span></span><span></span></span>"
         "Working on your request…"
         "</div>"
+    )
+
+
+# ---------- Data display ----------
+
+def kpi_tiles(items):
+    """
+    items: dicts with label, value, optional note and optional swatch
+    ("credit" | "debit" | "primary"). The swatch carries identity next
+    to the label; values stay in text colour.
+    """
+
+    cells = []
+
+    for item in items:
+        swatch = item.get("swatch")
+        dot = f'<span class="bm-swatch bm-swatch-{escape(swatch)}"></span>' if swatch else ""
+        note = f'<div class="bm-kpi-note">{escape(item["note"])}</div>' if item.get("note") else ""
+
+        cells.append(
+            '<div class="bm-kpi">'
+            f'<div class="bm-kpi-label">{dot}{escape(item["label"])}</div>'
+            f'<div class="bm-kpi-value">{escape(str(item["value"]))}</div>'
+            f"{note}</div>"
+        )
+
+    html(f'<div class="bm-kpis">{"".join(cells)}</div>')
+
+
+def callout(text, glyph="info"):
+    html(f'<div class="bm-callout">{icon(glyph)}<span>{escape(text)}</span></div>')
+
+
+def empty_state(glyph, title, body):
+    html(
+        '<div class="bm-empty">'
+        f'<span class="bm-icon-tile">{icon(glyph)}</span>'
+        f'<div class="bm-empty-title">{escape(title)}</div>'
+        f'<p class="bm-empty-body">{escape(body)}</p></div>'
+    )
+
+
+def panel_heading(title, subtitle=None):
+    sub = f'<div class="bm-panel-subtitle">{escape(subtitle)}</div>' if subtitle else ""
+    html(f'<div class="bm-panel-title">{escape(title)}</div>{sub}')
+
+
+def transactions_table(rows, customer_names=None, caption=None):
+    """
+    Accessible HTML table of transactions (newest first expected).
+    customer_names: optional {customer_id: name} to add a Customer column.
+    Amounts are signed: credits +, debits -. Type is shown as text with
+    a direction icon, never colour alone.
+    """
+
+    # Imported here to keep components importable without app data.
+    from ui.data import format_day, format_inr
+
+    show_customer = customer_names is not None
+    head = ["Date", "Transaction"]
+    if show_customer:
+        head.append("Customer")
+    head += ["Merchant", "Type", "Amount"]
+
+    body = []
+
+    for row in rows:
+        kind = (row.get("transaction_type") or "").strip().lower()
+        is_credit = kind == "credit"
+        if kind == "credit":
+            amount = format_inr(row["amount"], signed=True)
+        elif kind == "debit":
+            amount = "−" + format_inr(row["amount"])
+        else:
+            amount = format_inr(row["amount"])
+        badge = (
+            f'<span class="bm-type bm-type-{"credit" if is_credit else "debit"}">'
+            f'{icon("south_west" if is_credit else "north_east")}'
+            f'{escape(row.get("transaction_type") or "")}</span>'
+        )
+
+        cells = [
+            f'<td class="bm-nowrap">{escape(format_day(row["transaction_date"]))}</td>',
+            f'<td class="bm-muted bm-num bm-col-secondary">{escape(row["transaction_id"])}</td>',
+        ]
+        if show_customer:
+            name = customer_names.get(row["customer_id"], row["customer_id"])
+            cells.append(
+                f'<td>{escape(name)} <span class="bm-muted bm-col-secondary">{escape(row["customer_id"])}</span></td>'
+            )
+        cells += [
+            f'<td>{escape(row.get("merchant") or "—")}</td>',
+            f'<td class="bm-col-type">{badge}</td>',
+            f'<td class="bm-num bm-right">{escape(amount)}</td>',
+        ]
+        body.append("<tr>" + "".join(cells) + "</tr>")
+
+    classes = {
+        "Amount": ' class="bm-right"',
+        "Transaction": ' class="bm-col-secondary"',
+        "Type": ' class="bm-col-type"',
+    }
+    header = "".join(
+        f'<th scope="col"{classes.get(label, "")}>{label}</th>'
+        for label in head
+    )
+    caption_html = f'<caption>{escape(caption)}</caption>' if caption else ""
+
+    html(
+        '<div class="bm-table-wrap">'
+        f'<table class="bm-table{" bm-table-wide" if show_customer else ""}">'
+        f"{caption_html}<thead><tr>{header}</tr></thead>"
+        f'<tbody>{"".join(body)}</tbody></table></div>'
     )

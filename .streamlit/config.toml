@@ -36,7 +36,8 @@ buttonRadius = "0.625rem"
 dataframeBorderColor = "#E3DED4"
 dataframeHeaderBackgroundColor = "#F4F1EB"
 
-chartCategoricalColors = ["#2E5BFF", "#7C5CFF", "#0F8A5F", "#C2410C", "#0B1B3A", "#8A93A6"]
+# Order validated for colour-blind separation on white (all checks pass).
+chartCategoricalColors = ["#2E5BFF", "#C2410C", "#7C5CFF", "#0F8A5F"]
 
 [theme.sidebar]
 backgroundColor = "#FFFFFF"

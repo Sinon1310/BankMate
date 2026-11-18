@@ -13,7 +13,8 @@ A conversational banking assistant built with **LangChain, Groq and Retrieval-Au
 
 ## Highlights
 
-- **Web app** — a Streamlit workspace with a home page, a multi-conversation AI assistant, responsive layouts and a consistent design system.
+- **Web app** — a Streamlit workspace with a home page, a multi-conversation AI assistant, a Customer Explorer and Transaction Analytics, with responsive layouts and a consistent design system.
+- **Customer Explorer & Transaction Analytics** — searchable customer profiles, metrics taken from the same tool the assistant uses, merchant / daily / per-customer charts, and filters that scope every figure on the page. Net transaction flow is always labelled as credits minus debits, never as a balance.
 - **Tool calling** — the model retrieves customer profiles and transactions and computes debit, credit and net transaction flow in Python rather than estimating figures.
 - **RAG over policy documents** — section-aware chunking, Sentence Transformer embeddings and ChromaDB retrieval with a similarity-distance threshold.
 - **Validated citations** — the model declares which policies it used; BankMate keeps only IDs that were actually retrieved in that turn, and shows no sources when an answer isn't supported by the policies.
@@ -95,8 +96,10 @@ BankMate/
 │   ├── components.py          # Reusable UI components
 │   ├── navigation.py          # Page registry (only implemented pages)
 │   ├── state.py               # Conversation store and cross-page prompt hand-off
+│   ├── data.py                # Read-only data views (reuses app.data_loader and the metrics tool)
+│   ├── charts.py              # Altair charts in the design system
 │   ├── assets/                # Logo
-│   └── views/                 # home.py, assistant.py
+│   └── views/                 # home.py, assistant.py, customers.py, analytics.py
 ├── tests/                     # Offline backend and UI tests
 ├── data/                      # Synthetic customers, transactions, RAG evaluation set
 ├── knowledge/policies/        # Fictional policy documents
@@ -185,7 +188,6 @@ BankMate is an educational and portfolio project. It uses synthetic data and fic
 
 ## Roadmap
 
-- Customer Explorer and Transaction Analytics pages
 - Policy Intelligence page with document browsing and retrieval search
 - Persistent conversations and structured database storage
 - API layer and deployment configuration

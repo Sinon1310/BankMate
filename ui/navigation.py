@@ -9,6 +9,7 @@ screens. Paths are relative to the entry script (streamlit_app.py).
 HOME = {
     "path": "ui/views/home.py",
     "title": "Home",
+    "short": "Home",
     "icon": ":material/home:",
     "url_path": "home",
     "section": "Overview",
@@ -18,13 +19,34 @@ HOME = {
 ASSISTANT = {
     "path": "ui/views/assistant.py",
     "title": "AI Assistant",
+    "short": "Assistant",
     "icon": ":material/forum:",
     "url_path": "assistant",
     "section": "Workspace",
     "default": False,
 }
 
-PAGES = [HOME, ASSISTANT]
+CUSTOMERS = {
+    "path": "ui/views/customers.py",
+    "title": "Customer Explorer",
+    "short": "Customers",
+    "icon": ":material/group:",
+    "url_path": "customers",
+    "section": "Workspace",
+    "default": False,
+}
+
+ANALYTICS = {
+    "path": "ui/views/analytics.py",
+    "title": "Transaction Analytics",
+    "short": "Analytics",
+    "icon": ":material/monitoring:",
+    "url_path": "analytics",
+    "section": "Workspace",
+    "default": False,
+}
+
+PAGES = [HOME, ASSISTANT, CUSTOMERS, ANALYTICS]
 
 
 def sections():

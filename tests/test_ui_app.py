@@ -8,6 +8,7 @@ and what the user sees.
 """
 
 import sys
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -114,7 +115,12 @@ def test_only_implemented_pages_are_registered():
     paths = [page["path"] for page in navigation.PAGES]
     root = Path(APP).parent
 
-    assert paths == ["ui/views/home.py", "ui/views/assistant.py"]
+    assert paths == [
+        "ui/views/home.py",
+        "ui/views/assistant.py",
+        "ui/views/customers.py",
+        "ui/views/analytics.py",
+    ]
     for path in paths:
         assert (root / path).is_file()
 
@@ -316,3 +322,131 @@ def test_unavailable_backend_disables_input_without_dead_controls(monkeypatch):
     assert "Assistant unavailable" in page_text(at)
     assert at.chat_input(key="assistant-input").disabled
     assert not [b for b in at.main.button if b.key and b.key.startswith("chip-btn-empty")]
+
+
+# ---------- Customer Explorer (Stage 3) ----------
+
+CUSTOMERS = navigation.CUSTOMERS["path"]
+ANALYTICS = navigation.ANALYTICS["path"]
+
+
+def open_page(path):
+    at = run_app()
+    at.switch_page(path).run()
+    assert not at.exception, at.exception
+    return at
+
+
+def test_explorer_defaults_to_first_customer_with_tool_metrics():
+    at = open_page(CUSTOMERS)
+    text = page_text(at)
+
+    assert "Arjun Mehta" in text
+    # C101 per get_customer_metrics: debit 9000, credit 25000, net 16000, 5 rows.
+    assert "₹9,000" in text and "₹25,000" in text and "+₹16,000" in text
+    assert "not an account balance" in text
+    assert text.count("<tr>") == 1 + 5  # header + 5 transactions
+
+
+def test_explorer_selecting_customer_updates_detail():
+    at = open_page(CUSTOMERS)
+    at.button(key="cust-btn-C103").click().run()
+    text = page_text(at)
+
+    assert not at.exception, at.exception
+    assert "Rahul Nair" in text and "₹3,500" in text and "₹40,000" in text
+    assert at.query_params.get("customer") in ("C103", ["C103"])
+
+
+def test_explorer_search_filters_list():
+    at = open_page(CUSTOMERS)
+    at.text_input(key="explorer-search").set_value("pune").run()
+
+    customer_buttons = [b.key for b in at.button if b.key and b.key.startswith("cust-btn-")]
+    assert customer_buttons == ["cust-btn-C102"]
+
+    at.text_input(key="explorer-search").set_value("zzz").run()
+    assert "No customers match" in page_text(at)
+
+
+def test_explorer_ask_button_opens_assistant_for_that_customer(backend):
+    at = open_page(CUSTOMERS)
+    at.button(key="cust-btn-C102").click().run()
+    at.button(key="explorer-ask").click().run()
+
+    assert not at.exception, at.exception
+    assert len(backend.calls) == 1
+    assert "C102" in backend.questions()[0]
+
+
+def test_explorer_works_without_assistant_backend(monkeypatch):
+    monkeypatch.setitem(sys.modules, "app.assistant", None)
+    at = open_page(CUSTOMERS)
+    assert "Arjun Mehta" in page_text(at)
+
+
+# ---------- Transaction Analytics (Stage 3) ----------
+
+def open_analytics():
+    """
+    Open Analytics and normalise the Type segmented control.
+
+    Workaround for Streamlit 1.50 AppTest: an untouched single-select
+    segmented control keeps its default as a plain string, which AppTest
+    iterates character by character on the next rerun. Setting it as a
+    one-item list (as AppTest expects) avoids that; it must be done again
+    before each rerun. App code is unaffected.
+    """
+
+    at = open_page(ANALYTICS)
+    set_type(at, "All", run=False)
+    return at
+
+
+def set_type(at, value, run=True):
+    control = next(g for g in at.get("button_group") if g.key == "analytics-type")
+    control.set_value([value])
+    return control.run() if run else at
+
+def test_analytics_defaults_cover_all_transactions():
+    at = open_page(ANALYTICS)
+    text = page_text(at)
+
+    assert "₹14,000" in text and "₹95,000" in text and "+₹81,000" in text
+    assert "not an account balance" in text
+    assert len(at.get("arrow_vega_lite_chart")) == 3
+    assert text.count("<tr>") == 1 + 10
+
+
+def test_analytics_type_filter_scopes_kpis_charts_and_table():
+    at = open_analytics()
+    set_type(at, "Credit")
+    text = page_text(at)
+
+    assert not at.exception, at.exception
+    assert "₹0" in text and "₹95,000" in text
+    assert "No debits" in text  # merchant chart empty state
+    assert len(at.get("arrow_vega_lite_chart")) == 2
+    assert text.count("<tr>") == 1 + 3
+
+
+def test_analytics_customer_filter():
+    at = open_analytics()
+    at.multiselect(key="analytics-customers").set_value(["C101"]).run()
+    text = page_text(at)
+
+    assert "₹9,000" in text and "₹25,000" in text and "+₹16,000" in text
+    assert text.count("<tr>") == 1 + 5
+
+
+def test_analytics_empty_selection_shows_empty_state():
+    at = open_analytics()
+    at.multiselect(key="analytics-customers").set_value(["C102"]).run()
+    # Set the date, then the type (which reruns) — AppTest needs the
+    # segmented control re-normalised before every rerun.
+    at.date_input(key="analytics-dates").set_value((date(2026, 11, 4), date(2026, 11, 5)))
+    set_type(at, "Credit")
+
+    assert not at.exception, at.exception
+    assert "No transactions match these filters" in page_text(at)
+    assert not at.get("arrow_vega_lite_chart")

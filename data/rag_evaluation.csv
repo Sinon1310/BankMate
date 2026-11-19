@@ -1,11 +1,39 @@
-
-question,expected_policy_id
-"What information is required to raise a card dispute?",POL-001
-"What should a customer do after noticing an unauthorized card transaction?",POL-001
-"What happens after a customer submits a dispute?",POL-001
-"How are refunds handled for duplicate transactions?",POL-002
-"What happens when a refund is approved?",POL-002
-"What should customers never share with anyone?",POL-003
-"How are suspicious transactions investigated?",POL-003
-"What is the bank's home loan interest rate?",NONE
-"What is the bank's personal loan interest rate?",NONE
+question,expected_policy_ids,category,expected_sections
+"What information is required to raise a card dispute?",POL-001,direct,REQUIRED INFORMATION
+"What should a customer do after noticing an unauthorized card transaction?",POL-001,direct,DISPUTE INITIATION
+"Who verifies the details of a disputed card transaction?",POL-001,direct,INVESTIGATION
+"What statuses can a card dispute have?",POL-001,direct,STATUS TRACKING
+"How is the outcome of a card dispute communicated to the customer?",POL-001,direct,RESOLUTION
+"When can a customer raise a refund request?",POL-002,direct,REFUND REQUEST
+"What does the operations team verify before a refund?",POL-002,direct,VALIDATION
+"What happens when a refund is approved?",POL-002,direct,PROCESSING
+"What statuses can a refund request have?",POL-002,direct,TRACKING
+"What should customers never share with anyone?",POL-003,direct,CUSTOMER PROTECTION
+"How are suspicious transactions handled?",POL-003,direct,SUSPICIOUS ACTIVITY
+"How are potential security incidents escalated?",POL-003,direct,ESCALATION
+"Someone used my card without my permission. What should I do?",POL-001,paraphrase,DISPUTE INITIATION
+"I was charged twice for the same purchase. Can I get my money back?",POL-002,paraphrase,REFUND REQUEST
+"Is it okay to tell a bank caller my one-time password?",POL-003,paraphrase,CUSTOMER PROTECTION
+"How can I follow the progress of my refund?",POL-002,paraphrase,TRACKING
+"What happens to a payment that looks fraudulent?",POL-003,paraphrase,SUSPICIOUS ACTIVITY
+"Who looks into a contested card payment?",POL-001,paraphrase,INVESTIGATION
+"Which details do I need to provide to contest a merchant charge?",POL-001,paraphrase,REQUIRED INFORMATION
+"What is the purpose of the transaction refund policy?",POL-002,section,PURPOSE
+"What does the card dispute policy say about status tracking?",POL-001,section,STATUS TRACKING
+"What factors are considered when reviewing a potentially suspicious transaction?",POL-003,section,INVESTIGATION
+"What is checked during refund validation and how is the refund then processed?",POL-002,multi_section,VALIDATION;PROCESSING
+"How is a card dispute raised and how is its status tracked?",POL-001,multi_section,DISPUTE INITIATION;STATUS TRACKING
+"How are suspicious transactions reviewed and escalated?",POL-003,multi_section,INVESTIGATION;ESCALATION
+"What should I do about an unauthorized transaction?",POL-001;POL-003,ambiguous,
+"How is a transaction investigated?",POL-001;POL-003,ambiguous,
+"Will I get a reference number for my request?",POL-001;POL-002,ambiguous,
+"What statuses can a request move through?",POL-001;POL-002,ambiguous,
+"What is the bank's home loan interest rate?",NONE,out_of_scope,
+"What is the bank's personal loan interest rate?",NONE,out_of_scope,
+"Who is the chief executive of the bank?",NONE,out_of_scope,
+"Can you recommend a good credit card for travel?",NONE,out_of_scope,
+"How do I open a new savings account?",NONE,near_miss,
+"What is the daily ATM withdrawal limit?",NONE,near_miss,
+"How do I reset my internet banking password?",NONE,near_miss,
+"What are the fees for international card payments?",NONE,near_miss,
+"How do I block a lost debit card?",NONE,near_miss,

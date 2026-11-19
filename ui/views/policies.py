@@ -15,14 +15,21 @@ Nothing here invents metadata: IDs, names and versions come from each
 document's header via the backend loader.
 """
 
+import logging
+import re
 from html import escape
 
 import streamlit as st
 
 from ui import components as ui
+from ui import index_status
 from ui import policy_data as pdata
 from ui import state
 
+
+logger = logging.getLogger(__name__)
+
+POLICY_ID_FORMAT = re.compile(r"^POL-\d{1,6}$")
 
 LAST_QUERY = "policy_search_last_query"
 LAST_RESULT = "policy_search_last_result"
@@ -74,9 +81,10 @@ def _policy_id_badge(policy_id):
 try:
     catalog = _catalog()
     load_error = None
-except Exception as error:  # noqa: BLE001 - shown below
+except Exception as error:  # noqa: BLE001 - details go to the server log only
+    logger.error("Policy documents could not be loaded: %r", error)
     catalog = []
-    load_error = str(error) or error.__class__.__name__
+    load_error = "unavailable"
 
 # Resolve selection: URL first (deep links), then in-app selection.
 requested = st.query_params.get("policy")
@@ -127,6 +135,7 @@ def render_detail(policy):
             asked = st.chat_input(
                 f"Ask a question about {name}…",
                 key="policy-ask-input",
+                max_chars=1800,   # room for the policy prefix within the 2,000 limit
             )
 
         if asked:
@@ -265,7 +274,8 @@ def render_library():
     )
 
     if load_error is not None:
-        st.error(f"The policy documents could not be loaded. Details: {load_error}", icon=":material/error:")
+        st.error("The policy documents could not be loaded. Details are in the server logs.",
+                 icon=":material/error:")
         return
 
     if not catalog:
@@ -281,6 +291,7 @@ def render_library():
                 placeholder="Search titles, IDs, headings or text",
                 icon=":material/search:",
                 key="policy-filter",
+                max_chars=200,
             )
         with scope_col:
             scope = st.selectbox("Search in", pdata.SEARCH_SCOPES, key="policy-scope")
@@ -304,6 +315,7 @@ def render_library():
 
     # ---------- Semantic passage search ----------
     ui.section_label("Search the policy index")
+    index_status.show_index_banner()
 
     with st.container(key="bm-panel-retrieval"):
         ui.html(
@@ -319,6 +331,7 @@ def render_library():
                 placeholder="e.g. What details are needed to raise a card dispute?",
                 key="policy-retrieval-input",
                 label_visibility="collapsed",
+                max_chars=500,
             )
         with button_col:
             clicked = st.button("Search", key="policy-retrieval-search", use_container_width=True)
@@ -332,12 +345,13 @@ def render_library():
                     st.session_state[LAST_RESULT] = pdata.retrieve_passages(question)
                 st.session_state[LAST_QUERY] = question
             except pdata.RetrievalError as error:
+                logger.error("Policy passage search failed: %s", error)
                 st.session_state[LAST_QUERY] = None
                 st.session_state[LAST_RESULT] = None
                 st.error(
                     "The policy index could not be searched. If the vector store is "
-                    "missing, build it with `python -m app.vector_store`. "
-                    f"Details: {error}",
+                    "missing, rebuild it with `python -m app.vector_store`. "
+                    "Details are in the server logs.",
                     icon=":material/error:",
                 )
 
@@ -353,7 +367,10 @@ if selected is not None:
     render_detail(selected)
 else:
     if requested and load_error is None and catalog:
-        st.warning(f"No policy with ID “{requested}” exists. Showing all policies.", icon=":material/info:")
+        # Never echo the raw URL value: it is attacker-controllable and
+        # st.warning renders markdown (links, images).
+        shown = requested if POLICY_ID_FORMAT.match(requested) else "the requested ID"
+        st.warning(f"No policy matches {shown}. Showing all policies.", icon=":material/info:")
         if "policy" in st.query_params:
             del st.query_params["policy"]
     render_library()

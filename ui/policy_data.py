@@ -19,16 +19,18 @@ notice and is kept separate so the UI can always display it.
 import json
 import re
 
+# Re-exported so UI code can keep using policy_data.display_case.
+from app.citations import display_case  # noqa: F401
 from app.document_loader import (
+    HEADER_LINE,
     extract_policy_metadata,
+    is_header_only,
     load_policy_documents,
     split_into_sections,
 )
 
 
 NOTICE_SECTION = "IMPORTANT"
-
-HEADER_LINE = re.compile(r"^\s*(DOCUMENT|DOCUMENT ID|VERSION)\s*:", re.IGNORECASE)
 
 SEARCH_SCOPES = ("All text", "Titles & IDs", "Section headings")
 
@@ -39,24 +41,13 @@ class RetrievalError(Exception):
 
 # ---------- Catalogue ----------
 
-def _is_header_only(text):
-    lines = [line for line in text.splitlines() if line.strip()]
-    return bool(lines) and all(HEADER_LINE.match(line) for line in lines)
-
-
-def display_case(text):
-    """Headings are stored upper-case; title-case only all-caps text."""
-
-    return text.title() if text and text.isupper() else text
-
-
 def build_policy(document):
     metadata = extract_policy_metadata(document)
     sections = []
     notice = None
 
     for name, content in split_into_sections(document.page_content):
-        if name == "GENERAL" and _is_header_only(content):
+        if name == "GENERAL" and is_header_only(content):
             continue
         if name == NOTICE_SECTION:
             notice = content
@@ -189,7 +180,7 @@ def section_blocks(content):
 def is_header_passage(item):
     """True for an indexed chunk that is only the document header."""
 
-    return item.get("section") == "GENERAL" and _is_header_only(item.get("content") or "")
+    return item.get("section") == "GENERAL" and is_header_only(item.get("content") or "")
 
 
 def passage_section_label(item):

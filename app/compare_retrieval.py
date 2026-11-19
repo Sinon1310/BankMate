@@ -1,132 +1,59 @@
+"""
+Compare similarity vs MMR ranking on the evaluation dataset.
 
-import csv
-from pathlib import Path
-from collections import defaultdict
+Reuses app.evaluate_rag's dataset loader and reads policy IDs and
+sections from chunk metadata. LangChain's MMR retriever returns no
+distances, so this comparison covers ranking quality on in-scope
+questions only (top-k, no threshold); out-of-scope behaviour is measured
+by `python -m app.evaluate_rag` with the production threshold.
 
+Run: python -m app.compare_retrieval
+"""
+
+from app.evaluate_rag import IN_SCOPE, TOP_K, load_evaluation_dataset
 from app.retriever import get_retriever
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-EVALUATION_FILE = PROJECT_ROOT / "data" / "rag_evaluation.csv"
 
-TOP_K = 3
-
-
-def load_evaluation_dataset():
-    with open(EVALUATION_FILE, "r", encoding="utf-8-sig", newline="") as file:
-        lines = (line for line in file if line.strip())
-        reader = csv.DictReader(lines)
-
-        if not reader.fieldnames:
-            raise ValueError("Evaluation CSV is missing headers.")
-
-        reader.fieldnames = [name.strip() for name in reader.fieldnames]
-
-        return [
-            row for row in reader
-            if row.get("question") and row.get("expected_policy_id")
-        ]
-
-
-def get_policy_id(document):
-    source = document.metadata.get("source", "")
-    filename = Path(source).name
-
-    policy_mapping = {
-        "card_dispute_policy.txt": "POL-001",
-        "refund_policy.txt": "POL-002",
-        "transaction_security_policy.txt": "POL-003"
-    }
-
-    return policy_mapping.get(filename, "UNKNOWN")
-
-
-def evaluate_strategy(strategy_name, retriever, dataset):
-    positive_hits = 0
-    positive_precisions = []
-    negative_false_positives = 0
-    negative_queries = 0
-
-    print(f"\n{'=' * 75}")
-    print(f"EVALUATING: {strategy_name.upper()}")
-    print("=" * 75)
+def evaluate_strategy(name, retriever, dataset):
+    hits = relevant = retrieved = 0
+    sections_found = sections_expected = 0
 
     for row in dataset:
-        question = row["question"].strip()
-        expected = row["expected_policy_id"].strip()
+        documents = retriever.invoke(row["question"])[:TOP_K]
+        found = [(d.metadata.get("policy_id"), d.metadata.get("section")) for d in documents]
+        expected = set(row["expected_policy_ids"])
 
-        documents = retriever.invoke(question)[:TOP_K]
-        retrieved_ids = [get_policy_id(doc) for doc in documents]
-
-        if expected == "NONE":
-            negative_queries += 1
-
-            if documents:
-                negative_false_positives += 1
-
-            print(f"\nQuestion: {question}")
-            print(f"Expected: NONE")
-            print(f"Retrieved: {retrieved_ids}")
-            continue
-
-        relevant_count = retrieved_ids.count(expected)
-        hit = relevant_count > 0
-
-        if hit:
-            positive_hits += 1
-
-        precision = relevant_count / TOP_K
-        positive_precisions.append(precision)
-
-        print(f"\nQuestion: {question}")
-        print(f"Expected: {expected}")
-        print(f"Retrieved: {retrieved_ids}")
-        print(f"Hit: {hit} | Precision@3: {precision:.3f}")
-
-    positive_count = len(positive_precisions)
-
-    hit_rate = positive_hits / positive_count if positive_count else 0
-    avg_precision = (
-        sum(positive_precisions) / positive_count
-        if positive_count else 0
-    )
-    false_positive_rate = (
-        negative_false_positives / negative_queries
-        if negative_queries else 0
-    )
+        matches = sum(1 for policy_id, _ in found if policy_id in expected)
+        hits += bool(matches)
+        relevant += matches
+        retrieved += len(found)
+        sections_expected += len(row["expected_sections"])
+        sections_found += sum(
+            1 for section in row["expected_sections"]
+            if any((policy_id, section) in found for policy_id in expected)
+        )
 
     return {
-        "strategy": strategy_name,
-        "hit_rate": hit_rate,
-        "precision": avg_precision,
-        "false_positives": negative_false_positives,
-        "false_positive_rate": false_positive_rate
+        "strategy": name,
+        "questions": len(dataset),
+        "hit_rate": round(hits / len(dataset), 3) if dataset else None,
+        "precision": round(relevant / retrieved, 3) if retrieved else None,
+        "section_recall": round(sections_found / sections_expected, 3) if sections_expected else None,
     }
 
 
 def main():
-    dataset = load_evaluation_dataset()
-
-    similarity_retriever = get_retriever("similarity")
-    mmr_retriever = get_retriever("mmr")
+    dataset = [row for row in load_evaluation_dataset() if row["category"] in IN_SCOPE]
 
     results = [
-        evaluate_strategy("Similarity", similarity_retriever, dataset),
-        evaluate_strategy("MMR", mmr_retriever, dataset)
+        evaluate_strategy("similarity", get_retriever("similarity"), dataset),
+        evaluate_strategy("mmr", get_retriever("mmr"), dataset),
     ]
 
-    print("\n" + "=" * 75)
-    print("FINAL RETRIEVAL COMPARISON")
-    print("=" * 75)
-
+    print(f"\nRANKING COMPARISON (in-scope questions, top {TOP_K}, no threshold)")
     for result in results:
-        print(f"\nStrategy: {result['strategy']}")
-        print(f"Hit Rate@3: {result['hit_rate']:.3f}")
-        print(f"Average Precision@3: {result['precision']:.3f}")
-        print(f"False Positives: {result['false_positives']}")
-        print(
-            f"False Positive Rate: "
-            f"{result['false_positive_rate']:.3f}"
-        )
+        print(f"  {result['strategy']:<11} hit {result['hit_rate']}  precision {result['precision']}  "
+              f"section recall {result['section_recall']}  (n={result['questions']})")
 
 
 if __name__ == "__main__":

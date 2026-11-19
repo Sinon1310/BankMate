@@ -1,4 +1,5 @@
 
+import logging
 from pathlib import Path
 import re
 
@@ -13,16 +14,53 @@ POLICY_DIR = PROJECT_ROOT / "knowledge" / "policies"
 CHUNK_SIZE = 500
 CHUNK_OVERLAP = 80
 
+# Document header lines ("DOCUMENT:", "DOCUMENT ID:", "VERSION:"). They are
+# copied into every chunk's metadata, so a section made only of them is
+# metadata, not policy content.
+HEADER_LINE = re.compile(r"^\s*(DOCUMENT|DOCUMENT ID|VERSION)\s*:", re.IGNORECASE)
 
-def load_policy_documents():
+
+def is_header_only(text):
+    """True when every non-blank line is a document header line."""
+
+    lines = [line for line in (text or "").splitlines() if line.strip()]
+    return bool(lines) and all(HEADER_LINE.match(line) for line in lines)
+
+
+def _inside(path, directory):
+    try:
+        path.resolve().relative_to(directory.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def load_policy_documents(policy_dir=None):
+    """
+    Load the policy .txt files. Files that resolve outside the policy
+    folder (e.g. symlinks to elsewhere on disk) are skipped, so only
+    policy documents can ever enter the index or the policy pages.
+    """
+
+    policy_dir = Path(policy_dir or POLICY_DIR)
+
     loader = DirectoryLoader(
-        str(POLICY_DIR),
+        str(policy_dir),
         glob="*.txt",
         loader_cls=TextLoader,
         loader_kwargs={"encoding": "utf-8"}
     )
 
-    documents = loader.load()
+    documents = []
+
+    for document in loader.load():
+        if _inside(Path(document.metadata.get("source", "")), policy_dir):
+            documents.append(document)
+        else:
+            logging.getLogger(__name__).warning(
+                "Skipped policy file outside %s: %s",
+                policy_dir.name, Path(document.metadata.get("source", "")).name,
+            )
 
     print(f"Loaded {len(documents)} policy documents")
 
@@ -131,6 +169,11 @@ def split_documents(documents):
         sections = split_into_sections(document.page_content)
 
         for section_name, section_content in sections:
+
+            # The header block is already in every chunk's metadata;
+            # indexing it on its own only crowds out real content.
+            if section_name == "GENERAL" and is_header_only(section_content):
+                continue
 
             section_document = Document(
                 page_content=section_content,

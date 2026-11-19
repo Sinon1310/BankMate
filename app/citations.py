@@ -177,10 +177,14 @@ def select_citations(answer, retrieved_sources):
     return clean_answer, cited_sources
 
 
-def _display_case(text):
-    # Policy names and sections are stored in upper case; title-case
-    # them for display while leaving mixed-case text untouched.
-    return text.title() if text.isupper() else text
+def display_case(text):
+    """
+    Display rule for policy names and section headings, which are stored
+    upper-case in the documents: title-case all-caps text and leave
+    mixed-case text untouched. Shared by the backend and the UI.
+    """
+
+    return text.title() if text and text.isupper() else text
 
 
 def group_citations(sources):
@@ -221,7 +225,7 @@ def format_citation(citation):
     title = citation["policy_id"]
 
     if citation.get("policy_name"):
-        title += " — " + _display_case(citation["policy_name"])
+        title += " — " + display_case(citation["policy_name"])
 
     if citation.get("version"):
         title += " (v" + citation["version"] + ")"

@@ -12,6 +12,7 @@ import streamlit as st
 
 from app.data_loader import customers, transactions
 from app.document_loader import POLICY_DIR
+from app.security import MAX_QUESTION_CHARS
 from ui import components as ui
 
 
@@ -105,6 +106,7 @@ with st.container(key="bm-composer"):
     typed = st.chat_input(
         "Ask about a customer, a transaction or a policy…",
         key="home-composer-input",
+        max_chars=MAX_QUESTION_CHARS,
     )
 
     ui.html('<div class="bm-composer-hint">Try asking</div>')

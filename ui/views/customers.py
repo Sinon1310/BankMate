@@ -65,6 +65,7 @@ with list_column:
             placeholder="Search name, ID or city",
             icon=":material/search:",
             key="explorer-search",
+            max_chars=100,
             label_visibility="collapsed",
         )
 

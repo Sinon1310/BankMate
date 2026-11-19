@@ -38,15 +38,22 @@ class FakeBackend:
         self.calls = []
         self.fail_next = 0
         self.sources = [REFUND_CITATION]
+        self.remembered = set()
 
-    def __call__(self, question, session_id="default", model=None, tools=None):
-        self.calls.append({"question": question, "session_id": session_id})
+    def __call__(self, question, session_id="default", model=None, tools=None, request_id=None):
+        self.calls.append({"question": question, "session_id": session_id, "request_id": request_id})
 
         if self.fail_next:
             self.fail_next -= 1
             raise RuntimeError("backend down")
 
+        # Like the real backend: a successful answer means it now holds
+        # memory of this conversation.
+        self.remembered.add(session_id)
         return {"answer": f"Answer to: {question}", "sources": list(self.sources)}
+
+    def has_memory(self, session_id):
+        return session_id in self.remembered
 
     def questions(self):
         return [call["question"] for call in self.calls]
@@ -59,6 +66,7 @@ class FakeBackend:
 def backend(monkeypatch):
     fake = FakeBackend()
     monkeypatch.setattr(assistant_module, "ask_bankmate_with_sources", fake)
+    monkeypatch.setattr(assistant_module, "has_conversation_memory", fake.has_memory)
     return fake
 
 
@@ -552,7 +560,7 @@ def test_deep_link_opens_policy_and_unknown_id_falls_back():
     assert 'class="bm-policy-title">Transaction Security Guidelines' in page_text(at)
 
     at = open_policy("POL-999")
-    assert any("No policy with ID" in w.value for w in at.warning)
+    assert any("No policy matches POL-999" in w.value for w in at.warning)
     assert "3 policies" in page_text(at)
 
 
@@ -629,7 +637,10 @@ def test_index_search_error_state(monkeypatch):
     at.text_input(key="policy-retrieval-input").set_value("refunds").run()
 
     assert not at.exception, at.exception
-    assert any("could not be searched" in e.value and "collection missing" in e.value for e in at.error)
+    assert any("could not be searched" in e.value for e in at.error)
+    # The raw failure detail goes to the server log, never to the page.
+    assert not any("collection missing" in e.value for e in at.error)
+    assert "collection missing" not in page_text(at)
 
 
 def test_assistant_source_opens_policy_and_conversation_survives(backend):
@@ -648,3 +659,276 @@ def test_policy_pages_work_without_assistant_backend(monkeypatch):
     monkeypatch.setitem(sys.modules, "app.assistant", None)
     at = open_policy("POL-002")
     assert 'class="bm-policy-title">Transaction Refund Policy' in page_text(at)
+
+
+# ---------- Stage 5.2: friendly provider errors in the UI ----------
+
+def test_rate_limit_shows_friendly_message_and_retry(monkeypatch):
+    from app.errors import RATE_LIMITED, AssistantError
+
+    def limited(*args, **kwargs):
+        raise AssistantError(
+            RATE_LIMITED,
+            "Rate limit reached for model on tokens per minute (TPM): Limit 8000",
+            retry_after=13,
+        )
+
+    monkeypatch.setattr(assistant_module, "ask_bankmate_with_sources", limited)
+    at = open_assistant()
+    send(at, "Hello")
+    text = page_text(at)
+
+    assert "try again in about 13 seconds" in text
+    assert "TPM" not in text and "8000" not in text
+    assert [b for b in at.button if b.key == "assistant-retry"]
+
+
+# ---------- Stage 5.2.1: request IDs, interrupted runs, expired memory ----------
+
+def test_each_message_gets_a_stable_request_id_reused_by_retry(backend):
+    backend.fail_next = 1
+    at = open_assistant()
+    send(at, "Flaky question")
+    at.button(key="assistant-retry").click().run()
+
+    ids = [call["request_id"] for call in backend.calls]
+    assert len(ids) == 2 and ids[0] and ids[0] == ids[1]
+
+    send(at, "Another question")
+    assert backend.calls[-1]["request_id"] not in (None, ids[0])
+
+
+def test_interrupted_run_resend_returns_saved_answer_without_model_call(monkeypatch):
+    """Real engine, fake model: the UI re-sends the same request ID."""
+
+    from langchain_core.messages import AIMessage, HumanMessage
+
+    class CountingModel:
+        def __init__(self):
+            self.calls = 0
+
+        def invoke(self, messages):
+            self.calls += 1
+            return AIMessage(content=f"Answer #{self.calls}")
+
+    model = CountingModel()
+    monkeypatch.setattr(assistant_module, "_get_model", lambda: model)
+
+    at = open_assistant()
+    send(at, "What was his total debit?")
+    conversation = active(at)
+    session_id = conversation["session_id"]
+
+    try:
+        assert model.calls == 1
+        assert "Answer #1" in page_text(at)
+
+        # Simulate a run stopped after the backend saved the answer but
+        # before the UI recorded it: the reply is missing from UI state.
+        conversation["messages"].pop()
+        at.run()
+
+        assert not at.exception, at.exception
+        assert model.calls == 1                      # saved result returned
+        assert "Answer #1" in page_text(at)
+        stored = assistant_module.conversation_sessions[session_id]
+        assert [m.content for m in stored if isinstance(m, HumanMessage)] == ["What was his total debit?"]
+    finally:
+        for store in (assistant_module.conversation_sessions, assistant_module.grounding_context,
+                      assistant_module.session_last_active, assistant_module.conversation_versions,
+                      assistant_module.request_results, assistant_module.requests_in_flight):
+            store.pop(session_id, None)
+
+
+def test_expired_memory_shows_notice_and_does_not_resend(backend):
+    at = open_assistant()
+    send(at, "First question")
+    calls_before = len(backend.calls)
+
+    backend.remembered.clear()          # backend memory expired
+    at.run()
+    text = page_text(at)
+
+    assert "Earlier context has expired" in text
+    assert len(backend.calls) == calls_before        # nothing reprocessed
+    assert [b for b in at.button if b.key == "assistant-fresh-start"]
+    assert active(at)["memory_lost_at"] == 2
+
+    # Continuing works, and the notice stays where context ended.
+    send(at, "New question")
+    assert backend.calls[-1]["question"] == "New question"
+    assert "Earlier context has expired" in page_text(at)
+    assert active(at)["memory_lost_at"] == 2
+
+
+def test_expired_memory_fresh_start_opens_new_conversation(backend):
+    at = open_assistant()
+    send(at, "First question")
+    old_id = active(at)["id"]
+
+    backend.remembered.clear()
+    at.run()
+    at.button(key="assistant-fresh-start").click().run()
+
+    assert active(at)["id"] != old_id
+    assert "How can I help?" in page_text(at)
+
+
+def test_unanswered_question_is_not_silently_resent_after_expiry(backend):
+    at = open_assistant()
+    send(at, "Answered question")
+    # An interrupted, never-answered question, then the memory expires.
+    active(at)["messages"].append({"role": "user", "content": "Lost question", "request_id": "lost-1"})
+    backend.remembered.clear()
+    calls_before = len(backend.calls)
+    at.run()
+
+    assert len(backend.calls) == calls_before
+    assert "wasn't answered before BankMate's memory" in page_text(at)
+    assert [b for b in at.button if b.key == "assistant-retry"]
+    assert active(at)["memory_lost_at"] == 2           # before the lost question
+
+    at.button(key="assistant-retry").click().run()     # explicit user action
+    assert backend.calls[-1]["question"] == "Lost question"
+
+    # The notice stays above the re-asked question, not below its answer.
+    texts = [b.value for b in at.markdown if not b.value.lstrip().startswith("<style>")]
+    notice = next(i for i, t in enumerate(texts) if "Earlier context has expired" in t)
+    lost_q = next(i for i, t in enumerate(texts) if t == "Lost question")
+    answer = next(i for i, t in enumerate(texts) if t == "Answer to: Lost question")
+    assert notice < lost_q < answer
+
+
+# ---------- Stage 5.3: policy index readiness in the UI ----------
+
+from ui import index_status  # noqa: E402
+
+
+@pytest.fixture
+def failed_index(monkeypatch):
+    import app.vector_store as vector_store
+
+    monkeypatch.setitem(index_status._status, "ok", False)
+    monkeypatch.setitem(index_status._status, "error", "Building the policy index failed: disk full")
+    monkeypatch.setattr(vector_store, "is_index_ready", lambda persist_dir=None: False)
+
+
+def error_texts(at):
+    return [e.value for e in at.error]
+
+
+def test_failed_index_banner_on_policy_pages_only(failed_index):
+    assistant_page = open_assistant()
+    assert any("policy index isn't available" in e for e in error_texts(assistant_page))
+
+    policies_page = open_page(navigation.POLICIES["path"])
+    assert any("policy index isn't available" in e for e in error_texts(policies_page))
+    assert "Card Dispute Handling Policy" in page_text(policies_page)    # library still works
+
+    for path in (navigation.HOME["path"], CUSTOMERS, ANALYTICS):
+        page = open_page(path)
+        assert not error_texts(page), path
+
+
+def test_banner_never_shows_raw_build_error(failed_index):
+    at = open_assistant()
+    banner = next(e for e in error_texts(at) if "policy index" in e)
+    assert "disk full" not in banner
+
+
+def test_banner_clears_once_a_search_rebuilds_the_index(monkeypatch, failed_index):
+    import app.vector_store as vector_store
+
+    monkeypatch.setattr(vector_store, "is_index_ready", lambda persist_dir=None: True)
+    at = open_assistant()
+    assert not [e for e in error_texts(at) if "policy index" in e]
+
+
+def test_startup_initialisation_failure_is_recorded_not_raised(monkeypatch):
+    import app.vector_store as vector_store
+
+    def broken(*args, **kwargs):
+        raise vector_store.PolicyIndexError("cannot build")
+
+    monkeypatch.setenv("BANKMATE_INDEX_AUTOINIT", "1")
+    monkeypatch.setattr(vector_store, "ensure_policy_index", broken)
+    monkeypatch.setattr(vector_store, "is_index_ready", lambda persist_dir=None: False)
+    monkeypatch.setattr(index_status, "_status", dict(index_status._status))
+    index_status._initialize_once.clear()
+
+    try:
+        at = run_app()                        # app starts despite the failure
+        assert "Banking answers" in page_text(at)
+        assert index_status._status["ok"] is False
+        assert index_status._status["error"] == "cannot build"
+    finally:
+        index_status._initialize_once.clear()
+
+
+# ---------- Stage 5.4: application security ----------
+
+def test_malicious_policy_deep_link_is_not_rendered(monkeypatch):
+    at = run_app()
+    at.query_params["policy"] = "[Verify your account](https://evil.example/login)"
+    at.switch_page(POLICIES).run()
+
+    assert not at.exception, at.exception
+    warnings = [w.value for w in at.warning]
+    assert warnings and all("evil.example" not in w and "Verify your account" not in w for w in warnings)
+    assert "3 policies" in page_text(at)
+
+
+def test_unknown_but_well_formed_policy_id_is_named():
+    at = open_policy("POL-123")
+    assert any("No policy matches POL-123" in w.value for w in at.warning)
+
+
+def test_malicious_customer_deep_link_falls_back_safely():
+    at = run_app()
+    at.query_params["customer"] = "../../etc/passwd"
+    at.switch_page(CUSTOMERS).run()
+
+    assert not at.exception, at.exception
+    assert "Arjun Mehta" in page_text(at)                 # default customer
+    assert "passwd" not in page_text(at)
+
+
+def test_chat_inputs_enforce_length_limits():
+    from app.security import MAX_QUESTION_CHARS
+
+    home = run_app()
+    assert home.chat_input(key="home-composer-input").proto.max_chars == MAX_QUESTION_CHARS
+
+    chat = open_assistant()
+    assert chat.chat_input(key="assistant-input").proto.max_chars == MAX_QUESTION_CHARS
+
+    detail = open_policy("POL-001")
+    assert 0 < detail.chat_input(key="policy-ask-input").proto.max_chars <= MAX_QUESTION_CHARS - 100
+
+
+def test_backend_load_failure_shows_generic_message(monkeypatch):
+    monkeypatch.setitem(sys.modules, "app.assistant", None)     # ImportError, not a config error
+    at = open_assistant()
+    text = page_text(at)
+
+    assert "Assistant unavailable" in text
+    assert "could not be started" in text
+    assert "sys.modules" not in text and "Traceback" not in text
+
+
+def test_policy_load_failure_hides_internal_paths(monkeypatch):
+    import streamlit as st
+    from ui import policy_data
+
+    def broken():
+        raise OSError("Permission denied: '/Users/someone/secret/knowledge/policies'")
+
+    monkeypatch.setattr(policy_data, "load_catalog", broken)
+    st.cache_data.clear()
+    try:
+        at = open_page(POLICIES)
+        errors_shown = " ".join(e.value for e in at.error)
+        assert "could not be loaded" in errors_shown
+        assert "/Users/someone" not in errors_shown and "Permission denied" not in errors_shown
+    finally:
+        st.cache_data.clear()

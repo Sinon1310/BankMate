@@ -77,6 +77,7 @@ def session_id():
     yield sid
     assistant.conversation_sessions.pop(sid, None)
     assistant.grounding_context.pop(sid, None)
+    assistant.session_last_active.pop(sid, None)
 
 
 def run(session_id, responses, tools):
@@ -646,3 +647,25 @@ def test_grounded_not_specified_answer_needs_no_revision(session_id):
     assert model.calls == 2  # no revision request
     assert result["answer"] == answer.split("\nCITED_POLICIES")[0]
     assert [s["policy_id"] for s in result["sources"]] == ["POL-002"]
+
+
+def test_core_safety_and_grounding_instructions_remain_in_prompt():
+    """Guards prompt clean-ups from dropping a safety or grounding rule."""
+
+    prompt = assistant.system_message.content
+    for instruction in (
+        "Never invent customer details or financial figures.",
+        "Do not recommend financial products.",
+        "Do not make credit eligibility or approval decisions.",
+        "Never describe transaction flow as account balance.",
+        "Do not invent policy information.",
+        "do not attempt to answer using general knowledge.",
+        "Never invent policy IDs, sections or document names.",
+        "Do not mix information belonging to different customers.",
+        "state only what the retrieved policy text says.",
+    ):
+        assert instruction in prompt, instruction
+
+    # Each instruction appears once (no duplicated rules).
+    assert prompt.count("recommend financial products") == 1
+    assert prompt.count("credit eligibility") == 1

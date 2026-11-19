@@ -1095,6 +1095,39 @@ __VARIABLES__
   }
 }
 
+/* ---------- Assistant: expired-memory notice ---------- */
+
+.st-key-bm-memory-notice {
+  margin: 0.5rem 0 1rem;
+  padding: 0.875rem 1rem !important;
+  border: 1px solid var(--bm-border) !important;
+  border-radius: var(--bm-radius) !important;
+  background: var(--bm-surface-subtle);
+  gap: 0.625rem !important;
+}
+
+.bm-memory-notice {
+  display: flex;
+  gap: 0.625rem;
+  align-items: flex-start;
+}
+
+.bm-memory-notice .bm-icon {
+  color: var(--bm-text-faint);
+}
+
+.bm-memory-notice strong {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--bm-text);
+}
+
+.bm-memory-notice p {
+  margin: 0.125rem 0 0 !important;
+  font-size: 0.8125rem;
+  color: var(--bm-text-muted);
+}
+
 /* ---------- Assistant: links from sources to the policy library ---------- */
 
 [class*="st-key-bm-srclinks"] {

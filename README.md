@@ -91,10 +91,10 @@ BankMate/
 │   ├── data_loader.py         # CSV loading
 │   ├── document_loader.py     # Policy loading and section-aware chunking
 │   ├── embeddings.py          # Embedding model configuration
-│   ├── vector_store.py        # Builds the ChromaDB collection
-│   ├── retriever.py           # Similarity search with distance filtering
+│   ├── vector_store.py        # Policy index lifecycle: validate, build once, reuse
+│   ├── retriever.py           # Similarity search with the production k and threshold
 │   ├── rag_chain.py           # Standalone single-shot RAG chain
-│   ├── evaluate_rag.py        # Retrieval evaluation (Recall@3, Precision@3, false positives)
+│   ├── evaluate_rag.py        # Retrieval evaluation (Hit@3, Precision@3, section recall, false positives)
 │   └── compare_retrieval.py   # Similarity vs MMR comparison
 ├── ui/                        # Streamlit frontend
 │   ├── theme.py               # Design tokens and scoped CSS
@@ -137,7 +137,7 @@ pip install -r requirements.txt
 cp .env.example .env            # then set GROQ_API_KEY in .env
 ```
 
-Build the policy vector store (re-run only when policy documents or chunking change):
+The policy vector index (`chroma_db/`) is built automatically on first launch and reused afterwards. It is validated on every start and rebuilt only when it is missing, incomplete or out of date with the policy files. To force a rebuild:
 
 ```bash
 python -m app.vector_store
@@ -150,6 +150,17 @@ streamlit run streamlit_app.py
 ```
 
 Open http://localhost:8501. If `GROQ_API_KEY` is missing, Home, Customer Explorer, Transaction Analytics and Policy Intelligence (including passage search) still work; only the assistant shows an "unavailable" state.
+
+### Optional settings
+
+These environment variables (or Streamlit secrets) tune the conversation engine; the defaults suit Groq's free tier.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `BANKMATE_LLM_TIMEOUT_SECONDS` | `30` | Fail a stalled model request instead of hanging the UI |
+| `BANKMATE_LLM_MAX_RETRIES` | `1` | Client-level retries (honours `Retry-After` on rate limits) |
+| `BANKMATE_MAX_HISTORY_TURNS` | `6` | Recent question/answer turns kept per conversation |
+| `BANKMATE_SESSION_TTL_SECONDS` | `86400` | Idle conversations are dropped from memory after this |
 
 ### Run the terminal chat
 
@@ -177,18 +188,34 @@ python -m pytest -q
 
 The suite runs offline: the assistant is exercised with scripted fake models and tools, and UI flows run through Streamlit's `AppTest` with a fake backend. It covers citation selection, duplicate and missing metadata, unsupported questions, grounding and cleanup, conversation isolation, retry and unavailable states, analytics totals cross-checked against the metrics tool, and the policy catalogue checked against the raw policy files. Policy passage search is tested with a fake retrieval tool, so ChromaDB isn't required.
 
-Retrieval quality is measured separately against `data/rag_evaluation.csv` (uses the local ChromaDB store, no LLM calls):
+Retrieval quality is measured separately against `data/rag_evaluation.csv`: 38 questions across direct, paraphrased, section-specific, multi-section and ambiguous policy questions, plus out-of-scope and near-miss questions. It uses the production k and distance threshold and no LLM calls:
 
 ```bash
-python -m app.evaluate_rag          # Recall@3, Precision@3, false-positive rate
-python -m app.compare_retrieval     # Similarity vs MMR
+python -m app.evaluate_rag          # Hit@3, Precision@3, section recall, false-positive rate, threshold sweep
+python -m app.compare_retrieval     # Similarity vs MMR ranking
 ```
+
+Current results (k=3, threshold 1.2): Hit@3 0.931, Precision@3 0.859 and section recall 0.786 on 29 policy questions; false-positive rate 0.111 on 9 out-of-scope and near-miss questions.
+
+## Security notes
+
+BankMate uses synthetic data and fictional policies. The controls below are sensible defaults for a portfolio deployment; they are not a security certification and BankMate makes no claim of compliance with PCI DSS, RBI guidelines or any other regulatory framework.
+
+- **Secrets** — the Groq key is read from `.env` locally or the host's secrets in deployment; `.env`, Streamlit secrets, key files, logs and the local index are git-ignored. A missing, placeholder or malformed key fails fast with a message that never includes the value, and key-like strings are redacted from logs and errors.
+- **Untrusted content** — user input and retrieved policy text are treated as data. Policy results are labelled as untrusted reference text, and the system prompt forbids following instructions inside them.
+- **Customer-data scope** — the assistant can only look up customers whose IDs you type in the current conversation (e.g. `C101`); a lookup requested by retrieved text or for an unnamed customer is refused before any data is read. Refer to customers by ID.
+- **Tools** — the model can only call four read-only tools (profile, transactions, metrics, policy search); arguments are validated and normalised, and there is no file, shell or network access.
+- **Input and output** — questions are limited to 2,000 characters and stripped of control characters; links, images and URLs are neutralised in answers before display.
+- **Errors** — tracebacks are not shown in the browser (`showErrorDetails = "none"`); users see friendly messages while details go to the server log.
+- **Sessions** — conversations are isolated by random IDs and held only in server memory (lost on restart, expired after 24 hours idle). There are no user accounts or authentication; anyone with the URL can use the app, so put it behind access control before sharing it.
+- **Dependencies** — a `pip-audit` scan of the current environment reports known advisories in several packages (including transitive ones such as Pillow, torch and transformers). Their fixes require Python 3.10+, so they are addressed together with the planned move off Python 3.9 rather than by piecemeal upgrades.
 
 ## Scope and limitations
 
 BankMate is an educational and portfolio project. It uses synthetic data and fictional policy documents and is not connected to any banking system. It must not be used with real customer information or financial transactions.
 
-- Customer and transaction data are CSV files; conversation memory is in-process and resets when the app restarts.
+- Customer and transaction data are CSV files; conversation memory is in-process, keeps the most recent turns, and resets when the app restarts or a conversation is idle for 24 hours.
+- The assistant identifies customers by ID only (it will ask for an ID rather than guess one from a name).
 - Citations are policy-level; the model does not report which sections it relied on.
 - Citations come only from policies retrieved in the same answer, so a follow-up answered from earlier results (without a new search) shows no Sources card.
 - The code-level grounding check covers contact channels and specific procedural details (refund destination, timeframes, fees); other unsupported claims rely on the system prompt's policy-grounding rules.

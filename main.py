@@ -32,4 +32,9 @@ while True:
         print("\nBankMate:", answer, "\n")
 
     except Exception as error:
-        print(f"\nSomething went wrong: {error}\n")
+        # AssistantError has a user-safe message; never print raw provider
+        # errors (details are logged by app.assistant).
+        message = getattr(error, "user_message", None) or (
+            "Something went wrong while answering. Please try again."
+        )
+        print(f"\nBankMate: {message}\n")

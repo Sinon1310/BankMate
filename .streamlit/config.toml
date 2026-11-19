@@ -3,6 +3,10 @@
 
 [client]
 toolbarMode = "minimal"
+# Never show tracebacks or exception details in the browser; they are
+# printed to the server console. For local debugging, run with
+# STREAMLIT_CLIENT_SHOW_ERROR_DETAILS=full.
+showErrorDetails = "none"
 
 [theme]
 base = "light"

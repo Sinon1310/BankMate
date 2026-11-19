@@ -11,7 +11,7 @@ ui/views/. Pages are registered in ui/navigation.py.
 import streamlit as st
 
 from ui import components as ui
-from ui import navigation, state
+from ui import index_status, navigation, state
 from ui.theme import apply_theme
 
 
@@ -24,6 +24,9 @@ st.set_page_config(
 
 apply_theme()
 state.init_state()
+
+# Reuse the policy index, or build it on a fresh install (once per process).
+index_status.initialize()
 
 st.logo(
     "ui/assets/logo.svg",

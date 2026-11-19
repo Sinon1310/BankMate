@@ -1,183 +1,222 @@
+"""
+Retrieval evaluation against data/rag_evaluation.csv.
+
+Uses the production retrieval settings (k and distance threshold come
+from app.retriever, not copies) and reads policy IDs and sections from
+each retrieved chunk's metadata.
+
+Dataset columns:
+- question
+- expected_policy_ids: policy IDs separated by ";" (any match counts), or NONE
+- category: direct | paraphrase | section | multi_section | ambiguous
+            (in scope) or out_of_scope | near_miss (should retrieve nothing)
+- expected_sections: optional section names separated by ";"
+
+Metrics (all on results within the production threshold, top-k):
+- Hit@k: share of in-scope questions with at least one chunk from an
+  expected policy.
+- Precision@k: relevant chunks / all retrieved chunks, over all in-scope
+  questions (micro-average). Irrelevant-retrieval rate = 1 - precision.
+- Section recall: share of expected sections retrieved (questions that
+  list sections).
+- Miss rate: in-scope questions that retrieved nothing.
+- False-positive rate: out-of-scope / near-miss questions that retrieved
+  anything.
+
+Run: python -m app.evaluate_rag
+"""
 
 import csv
 from pathlib import Path
-from collections import defaultdict
 
-from app.retriever import search_with_scores
+from app.retriever import POLICY_MAX_DISTANCE, POLICY_SEARCH_K
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 EVALUATION_FILE = PROJECT_ROOT / "data" / "rag_evaluation.csv"
 
-TOP_K = 3
-MAX_DISTANCE = 1.4
+TOP_K = POLICY_SEARCH_K
+MAX_DISTANCE = POLICY_MAX_DISTANCE
 
-POLICY_MAPPING = {
-    "card_dispute_policy.txt": "POL-001",
-    "refund_policy.txt": "POL-002",
-    "transaction_security_policy.txt": "POL-003"
-}
+IN_SCOPE = ("direct", "paraphrase", "section", "multi_section", "ambiguous")
+NO_ANSWER = ("out_of_scope", "near_miss")
+CATEGORIES = IN_SCOPE + NO_ANSWER
+
+SWEEP_THRESHOLDS = (1.0, 1.1, 1.2, 1.3, 1.4)
 
 
+def _split(value):
+    return [part.strip() for part in (value or "").split(";") if part.strip()]
 
-def load_evaluation_dataset():
-    with open(EVALUATION_FILE, "r", encoding="utf-8-sig", newline="") as file:
-        lines = (line for line in file if line.strip())
-        reader = csv.DictReader(lines)
+
+def load_evaluation_dataset(path=EVALUATION_FILE):
+    with open(path, "r", encoding="utf-8-sig", newline="") as file:
+        reader = csv.DictReader(line for line in file if line.strip())
 
         if not reader.fieldnames:
             raise ValueError("Evaluation CSV is empty or missing headers.")
 
-        reader.fieldnames = [
-            name.strip() for name in reader.fieldnames
-        ]
-
-        required_columns = {
-            "question",
-            "expected_policy_id"
-        }
-
-        missing = required_columns - set(reader.fieldnames)
+        reader.fieldnames = [name.strip() for name in reader.fieldnames]
+        required = {"question", "expected_policy_ids", "category"}
+        missing = required - set(reader.fieldnames)
 
         if missing:
-            raise ValueError(
-                f"Missing CSV columns: {missing}. "
-                f"Found: {reader.fieldnames}"
-            )
+            raise ValueError(f"Missing CSV columns: {missing}. Found: {reader.fieldnames}")
 
-        return list(reader)
+        rows = []
+
+        for row in reader:
+            category = (row.get("category") or "").strip()
+            expected = _split(row.get("expected_policy_ids"))
+
+            if category not in CATEGORIES:
+                raise ValueError(f"Unknown category {category!r} for {row.get('question')!r}")
+
+            rows.append({
+                "question": row["question"].strip(),
+                "category": category,
+                "expected_policy_ids": [] if expected == ["NONE"] else expected,
+                "expected_sections": _split(row.get("expected_sections")),
+            })
+
+        return rows
 
 
-def evaluate_question(question, expected_policy_id):
-    results = search_with_scores(question, k=TOP_K)
+def score_question(row, results, max_distance=MAX_DISTANCE, k=TOP_K):
+    """
+    results: [(metadata_dict, distance), ...] ordered by distance (raw
+    top-k from the vector store). Returns a per-question record.
+    """
 
-    # Keep only results within the current distance threshold
-    accepted_results = [
-        (document, distance)
-        for document, distance in results
-        if distance <= MAX_DISTANCE
+    kept = [(meta, distance) for meta, distance in results[:k] if distance <= max_distance]
+    retrieved = [meta.get("policy_id") for meta, _ in kept]
+    sections = {(meta.get("policy_id"), meta.get("section")) for meta, _ in kept}
+    expected = set(row["expected_policy_ids"])
+
+    relevant = sum(1 for policy_id in retrieved if policy_id in expected)
+    expected_sections = [
+        section for section in row["expected_sections"]
+        if any((policy_id, section) in sections for policy_id in expected)
     ]
 
-    retrieved_policy_ids = []
-
-    for document, distance in accepted_results:
-        source = Path(
-            document.metadata.get("source", "")
-        ).name
-
-        policy_id = POLICY_MAPPING.get(source)
-
-        if policy_id:
-            retrieved_policy_ids.append(policy_id)
-
-    if expected_policy_id == "NONE":
-        return {
-            "question": question,
-            "expected": expected_policy_id,
-            "retrieved": retrieved_policy_ids,
-            "hit": None,
-            "precision": None,
-            "false_positive": len(accepted_results) > 0
-        }
-
-    relevant_count = sum(
-        1 for policy_id in retrieved_policy_ids
-        if policy_id == expected_policy_id
-    )
-
-    hit = relevant_count > 0
-
-    precision = relevant_count / TOP_K
-
     return {
-        "question": question,
-        "expected": expected_policy_id,
-        "retrieved": retrieved_policy_ids,
-        "hit": hit,
-        "precision": precision,
-        "false_positive": False
+        "question": row["question"],
+        "category": row["category"],
+        "expected": sorted(expected),
+        "retrieved": retrieved,
+        "distances": [round(distance, 3) for _, distance in kept],
+        "top_distance": round(results[0][1], 3) if results else None,
+        "hit": bool(relevant) if expected else None,
+        "relevant": relevant,
+        "irrelevant": len(retrieved) - relevant,
+        "sections_expected": len(row["expected_sections"]),
+        "sections_found": len(expected_sections),
+        "false_positive": bool(kept) if not expected else None,
     }
 
 
+def summarize(records):
+    in_scope = [r for r in records if r["category"] in IN_SCOPE]
+    no_answer = [r for r in records if r["category"] in NO_ANSWER]
+    retrieved = sum(r["relevant"] + r["irrelevant"] for r in in_scope)
+    relevant = sum(r["relevant"] for r in in_scope)
+    with_sections = [r for r in in_scope if r["sections_expected"]]
+
+    def rate(numerator, denominator):
+        return round(numerator / denominator, 3) if denominator else None
+
+    by_category = {}
+    for category in CATEGORIES:
+        rows = [r for r in records if r["category"] == category]
+        if not rows:
+            continue
+        if category in IN_SCOPE:
+            by_category[category] = {"n": len(rows), "hit_rate": rate(sum(r["hit"] for r in rows), len(rows))}
+        else:
+            by_category[category] = {"n": len(rows),
+                                     "false_positive_rate": rate(sum(r["false_positive"] for r in rows), len(rows))}
+
+    return {
+        "in_scope": {
+            "n": len(in_scope),
+            "hit_rate": rate(sum(r["hit"] for r in in_scope), len(in_scope)),
+            "precision": rate(relevant, retrieved),
+            "irrelevant_rate": rate(retrieved - relevant, retrieved),
+            "section_recall": rate(sum(r["sections_found"] for r in with_sections),
+                                   sum(r["sections_expected"] for r in with_sections)),
+            "miss_rate": rate(sum(1 for r in in_scope if not r["retrieved"]), len(in_scope)),
+        },
+        "no_answer": {
+            "n": len(no_answer),
+            "false_positive_rate": rate(sum(r["false_positive"] for r in no_answer), len(no_answer)),
+        },
+        "by_category": by_category,
+    }
+
+
+def threshold_sweep(dataset, raw_results, thresholds=SWEEP_THRESHOLDS):
+    """Diagnostic only: metrics at other thresholds from the same results."""
+
+    return {
+        threshold: summarize([score_question(row, raw_results[row["question"]], threshold)
+                              for row in dataset])
+        for threshold in thresholds
+    }
+
+
+def run_evaluation(search, dataset=None):
+    """
+    search(question, k) -> [(metadata, distance), ...]. Returns
+    (records, summary, sweep). Raw results are fetched once per question.
+    """
+
+    dataset = load_evaluation_dataset() if dataset is None else dataset
+    raw = {row["question"]: search(row["question"], TOP_K) for row in dataset}
+    records = [score_question(row, raw[row["question"]]) for row in dataset]
+    return records, summarize(records), threshold_sweep(dataset, raw)
+
+
+def _store_search(question, k):
+    from app.retriever import search_with_scores
+
+    return [(document.metadata, distance) for document, distance in search_with_scores(question, k)]
+
+
 def main():
-    dataset = load_evaluation_dataset()
+    records, summary, sweep = run_evaluation(_store_search)
 
-    positive_results = []
-    negative_results = []
+    print(f"\nBANKMATE RETRIEVAL EVALUATION  (k={TOP_K}, max distance={MAX_DISTANCE}, production settings)")
+    print("=" * 96)
 
-    print("\nBANKMATE - RAG EVALUATION")
-    print("=" * 70)
-
-    for row in dataset:
-        result = evaluate_question(
-            row["question"],
-            row["expected_policy_id"]
-        )
-
-        if result["expected"] == "NONE":
-            negative_results.append(result)
+    for record in records:
+        if record["category"] in IN_SCOPE:
+            outcome = "HIT " if record["hit"] else "MISS"
         else:
-            positive_results.append(result)
+            outcome = "FP  " if record["false_positive"] else "OK  "
+        print(f"{outcome} [{record['category']:<13}] {record['question'][:58]:<58} "
+              f"-> {record['retrieved'] or '-'} {record['distances'] or ''} (top {record['top_distance']})")
 
-        print("\nQuestion:", result["question"])
-        print("Expected:", result["expected"])
-        print("Retrieved:", result["retrieved"])
+    in_scope, no_answer = summary["in_scope"], summary["no_answer"]
+    print("\nPolicy questions (in scope)")
+    print(f"  questions            {in_scope['n']}")
+    print(f"  Hit@{TOP_K}                {in_scope['hit_rate']}")
+    print(f"  Precision@{TOP_K}          {in_scope['precision']}  (irrelevant-retrieval rate {in_scope['irrelevant_rate']})")
+    print(f"  Section recall       {in_scope['section_recall']}")
+    print(f"  Miss rate            {in_scope['miss_rate']}")
+    print("\nOut-of-scope and near-miss questions")
+    print(f"  questions            {no_answer['n']}")
+    print(f"  False-positive rate  {no_answer['false_positive_rate']}")
+    print("\nBy category")
+    for category, values in summary["by_category"].items():
+        print(f"  {category:<14} {values}")
 
-        if result["expected"] == "NONE":
-            print(
-                "False Positive:",
-                result["false_positive"]
-            )
-        else:
-            print("Hit:", result["hit"])
-            print(
-                "Precision@3:",
-                round(result["precision"], 2)
-            )
-
-    total_positive = len(positive_results)
-
-    recall = (
-        sum(result["hit"] for result in positive_results)
-        / total_positive
-        if total_positive else 0.0
-    )
-
-    precision_values = [
-        result["precision"]
-        for result in positive_results
-    ]
-
-    average_precision = (
-        sum(precision_values) / len(precision_values)
-        if precision_values else 0.0
-    )
-
-    false_positives = sum(
-        result["false_positive"]
-        for result in negative_results
-    )
-
-    false_positive_rate = (
-        false_positives / len(negative_results)
-        if negative_results else 0.0
-    )
-
-    print("\n" + "=" * 70)
-    print("OVERALL EVALUATION RESULTS")
-    print("=" * 70)
-
-    print("Positive Questions:", total_positive)
-    print("Negative Questions:", len(negative_results))
-    print("Recall@3:", round(recall, 3))
-    print("Average Precision@3:", round(average_precision, 3))
-    print("False Positives:", false_positives)
-    print(
-        "False Positive Rate:",
-        round(false_positive_rate, 3)
-    )
-
-    print("\nEvaluation completed.")
+    print("\nThreshold sweep (diagnostic only; production threshold unchanged)")
+    print(f"  {'threshold':<10} {'hit':>6} {'precision':>10} {'section':>8} {'miss':>6} {'false+':>7}")
+    for threshold, result in sweep.items():
+        i, n = result["in_scope"], result["no_answer"]
+        marker = "  <- production" if threshold == MAX_DISTANCE else ""
+        print(f"  {threshold:<10} {i['hit_rate']:>6} {i['precision']:>10} {i['section_recall']:>8} "
+              f"{i['miss_rate']:>6} {n['false_positive_rate']:>7}{marker}")
 
 
 if __name__ == "__main__":

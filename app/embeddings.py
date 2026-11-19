@@ -4,16 +4,22 @@ from functools import lru_cache
 from langchain_huggingface import HuggingFaceEmbeddings
 
 
-# Loading the model takes ~3s, and retriever.get_vector_store() asks for
-# it on every search. It is stateless after loading, so one instance per
-# process is reused. Only the model is cached — Chroma clients are still
-# created per call, so a rebuilt vector store is picked up immediately.
+EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+NORMALIZE_EMBEDDINGS = True
+
+# Identifies the vectors an index was built with; part of its fingerprint.
+EMBEDDING_ID = f"{EMBEDDING_MODEL_NAME}|normalized={NORMALIZE_EMBEDDINGS}"
+
+
+# Loading the model takes ~3s and every search needs it. It is stateless
+# after loading, so one instance per process is reused (index builds and
+# searches share it).
 @lru_cache(maxsize=1)
 def get_embedding_model():
     embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2",
+        model_name=EMBEDDING_MODEL_NAME,
         model_kwargs={"device": "cpu"},
-        encode_kwargs={"normalize_embeddings": True}
+        encode_kwargs={"normalize_embeddings": NORMALIZE_EMBEDDINGS}
     )
 
     return embeddings

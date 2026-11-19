@@ -10,6 +10,7 @@ from html import escape
 
 import streamlit as st
 
+from app.citations import display_case
 from ui import navigation, state
 
 
@@ -156,12 +157,6 @@ def capability_card(key, glyph, title, body, action_label, tone=""):
 SOURCES_LABEL = "Sources · fictional BankMate training policies"
 
 
-def _display_case(text):
-    # Policy names are stored upper-case in the documents; mirror the
-    # backend's display rule (title-case only all-caps text).
-    return text.title() if text.isupper() else text
-
-
 def sources_block(citations):
     """
     Policy-level citations returned by ask_bankmate_with_sources.
@@ -176,7 +171,7 @@ def sources_block(citations):
 
     for citation in citations:
         policy_id = escape(citation.get("policy_id", ""))
-        name = escape(_display_case(citation.get("policy_name") or "")) or policy_id
+        name = escape(display_case(citation.get("policy_name") or "")) or policy_id
 
         meta = []
         if citation.get("version"):

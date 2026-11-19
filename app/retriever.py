@@ -1,22 +1,22 @@
 
-from pathlib import Path
-
-from langchain_chroma import Chroma
-from app.embeddings import get_embedding_model
+from app.vector_store import CHROMA_DIR, ensure_policy_index, open_policy_store
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CHROMA_DIR = PROJECT_ROOT / "chroma_db"
+# Production retrieval settings, shared by the policy search tool and the
+# retrieval evaluation so both measure the same behaviour.
+POLICY_SEARCH_K = 3
+POLICY_MAX_DISTANCE = 1.2   # squared L2 on normalised embeddings; lower = closer
 
 
 def get_vector_store():
-    embeddings = get_embedding_model()
+    """
+    The policy store, after making sure a valid index exists (built on
+    first use if needed). Raises vector_store.PolicyIndexError when the
+    index is unavailable, so callers never mistake that for "no match".
+    """
 
-    return Chroma(
-        collection_name="bankmate_policies",
-        embedding_function=embeddings,
-        persist_directory=str(CHROMA_DIR)
-    )
+    ensure_policy_index()
+    return open_policy_store()
 
 
 def get_retriever(search_type="similarity"):
@@ -38,7 +38,7 @@ def get_retriever(search_type="similarity"):
     )
 
 
-def search_with_scores(question, k=3):
+def search_with_scores(question, k=POLICY_SEARCH_K):
     vector_store = get_vector_store()
 
     results = vector_store.similarity_search_with_score(
@@ -48,7 +48,7 @@ def search_with_scores(question, k=3):
 
     return results
 
-def search_relevant_documents(question, k=3, max_distance=1.3):
+def search_relevant_documents(question, k=POLICY_SEARCH_K, max_distance=POLICY_MAX_DISTANCE):
     """
     Retrieve only documents within the configured
     maximum distance.

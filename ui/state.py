@@ -12,8 +12,13 @@ Conversations live in Streamlit session state (this browser tab) and in
 the backend's in-process memory, so they end when the server restarts.
 
 Message shape: {"role": "user" | "assistant", "content": str,
+                "request_id": str (user, stable per submission),
                 "sources": list (assistant, optional),
                 "error": True (assistant failure, optional)}
+
+A conversation may carry "memory_lost_at": the message index where the
+backend's memory of it ended (idle expiry or server restart). Messages
+before that index are shown but are no longer available to the model.
 """
 
 import time
@@ -111,7 +116,13 @@ def add_user_message(conversation, prompt):
     if not conversation["messages"]:
         conversation["title"] = make_title(prompt)
 
-    conversation["messages"].append({"role": "user", "content": prompt})
+    conversation["messages"].append({
+        "role": "user",
+        "content": prompt,
+        # Stable ID for this submission: re-sending it (e.g. after an
+        # interrupted run) returns the saved answer instead of asking again.
+        "request_id": str(uuid.uuid4()),
+    })
 
 
 def awaiting_reply(conversation):
@@ -133,6 +144,26 @@ def add_assistant_error(conversation, message):
         "content": message,
         "error": True,
     })
+
+
+def has_reply_since_memory_reset(conversation):
+    """True if a successful answer exists after the last memory reset."""
+
+    start = conversation.get("memory_lost_at") or 0
+    return any(
+        message["role"] == "assistant" and not message.get("error")
+        for message in conversation["messages"][start:]
+    )
+
+
+def mark_memory_lost(conversation, at=None):
+    """
+    Record where the model's memory of this conversation ends: messages
+    before index `at` (default: all current messages) are no longer
+    available to it.
+    """
+
+    conversation["memory_lost_at"] = len(conversation["messages"]) if at is None else at
 
 
 def retry_last(conversation):

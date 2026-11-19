@@ -16,7 +16,9 @@ from html import escape
 
 import streamlit as st
 
+from app.security import MAX_QUESTION_CHARS
 from ui import components as ui
+from ui import index_status
 from ui import state
 
 
@@ -39,11 +41,28 @@ EMPTY_STATE_PROMPTS = [
 # ---------- Backend (loaded lazily: needs GROQ_API_KEY) ----------
 
 try:
-    from app.assistant import ask_bankmate_with_sources
+    from app.assistant import ask_bankmate_with_sources, has_conversation_memory
     backend_error = None
-except Exception as error:  # noqa: BLE001 - shown to the user below
+except ValueError as error:
+    # Configuration problems (e.g. GROQ_API_KEY) have value-free messages.
     ask_bankmate_with_sources = None
-    backend_error = str(error) or error.__class__.__name__
+    has_conversation_memory = None
+    backend_error = str(error)
+except Exception as error:  # noqa: BLE001 - details go to the server log only
+    import logging
+
+    from app.security import redact_secrets
+
+    logging.getLogger(__name__).error("Assistant backend failed to load: %s", redact_secrets(repr(error)))
+    ask_bankmate_with_sources = None
+    has_conversation_memory = None
+    backend_error = "The AI backend could not be started. Details are in the server logs."
+
+MEMORY_LOST_PENDING = (
+    "This question wasn't answered before BankMate's memory of this "
+    "conversation expired. Use Try again to ask it now — BankMate won't "
+    "have the earlier context."
+)
 
 
 # ---------- Resolve this run's input before rendering ----------
@@ -52,6 +71,7 @@ typed_prompt = st.chat_input(
     "Message BankMate…",
     key="assistant-input",
     disabled=backend_error is not None,
+    max_chars=MAX_QUESTION_CHARS,
 )
 
 pending = state.pop_pending_prompt()
@@ -64,6 +84,22 @@ else:
     prompt = typed_prompt
 
 conversation = state.active_conversation()
+
+# If the backend no longer holds this conversation (idle expiry or a
+# server restart) although it was answered before, mark where context
+# ended instead of implying the model still sees the older messages.
+if (
+    backend_error is None
+    and state.has_reply_since_memory_reset(conversation)
+    and not has_conversation_memory(conversation["session_id"])
+):
+    if state.awaiting_reply(conversation):
+        # Context ends before the stale, unanswered question, which is
+        # never re-sent silently: the user can ask it again explicitly.
+        state.mark_memory_lost(conversation, at=len(conversation["messages"]) - 1)
+        state.add_assistant_error(conversation, MEMORY_LOST_PENDING)
+    else:
+        state.mark_memory_lost(conversation)
 
 prompt_added = bool(prompt) and backend_error is None
 
@@ -140,6 +176,9 @@ with st.container(key="bm-thread"):
 
     messages = conversation["messages"]
 
+    if backend_error is None:
+        index_status.show_index_banner()
+
     if backend_error is not None and not messages:
         # No suggestion chips here: they could not do anything.
         ui.html(
@@ -182,8 +221,33 @@ with st.container(key="bm-thread"):
             "</div>"
         )
 
+    memory_lost_at = conversation.get("memory_lost_at")
+
+    def render_memory_notice():
+        with st.container(key="bm-memory-notice"):
+            ui.html(
+                '<div class="bm-memory-notice">'
+                f'{ui.icon("history_toggle_off")}<div>'
+                "<strong>Earlier context has expired</strong>"
+                "<p>BankMate no longer remembers the messages above, so new "
+                "questions here start without that context.</p></div></div>"
+            )
+            if st.button(
+                "Start a fresh conversation",
+                icon=":material/edit_square:",
+                key="assistant-fresh-start",
+                type="secondary",
+            ):
+                state.new_conversation()
+                st.rerun()
+
     for index, message in enumerate(messages):
+        if index == memory_lost_at:
+            render_memory_notice()
         render_message(index, message)
+
+    if memory_lost_at is not None and memory_lost_at >= len(messages):
+        render_memory_notice()
 
     # Retry is offered only for a failure at the end of the thread.
     if messages and messages[-1].get("error") and backend_error is None:
@@ -208,6 +272,7 @@ with st.container(key="bm-thread"):
 
     if backend_error is None and state.awaiting_reply(conversation):
         question = messages[-1]["content"]
+        request_id = messages[-1].get("request_id")
 
         with st.container(key=f"bm-msg-assistant-{len(messages)}"):
             with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
@@ -221,18 +286,25 @@ with st.container(key="bm-thread"):
                 if prompt_added:
                     st.rerun()
 
+                failure_message = None
+
                 try:
                     result = ask_bankmate_with_sources(
                         question,
                         session_id=conversation["session_id"],
+                        request_id=request_id,
                     )
-                except Exception:  # noqa: BLE001 - recorded as an error message
+                except Exception as error:  # noqa: BLE001 - recorded as an error message
                     result = None
+                    # AssistantError carries a user-safe message (e.g. rate
+                    # limits); anything else gets the generic message. Raw
+                    # provider errors are logged by the backend, never shown.
+                    failure_message = getattr(error, "user_message", None) or ERROR_MESSAGE
 
                 placeholder.empty()
 
         if result is None:
-            state.add_assistant_error(conversation, ERROR_MESSAGE)
+            state.add_assistant_error(conversation, failure_message or ERROR_MESSAGE)
         else:
             state.add_assistant_reply(conversation, result["answer"], result["sources"])
 

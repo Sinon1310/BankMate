@@ -4,6 +4,7 @@ import pytest
 
 from app.citations import (
     SOURCES_HEADER,
+    display_case,
     collect_sources,
     extract_cited_policy_ids,
     format_answer_with_sources,
@@ -242,3 +243,26 @@ def test_sources_block_keeps_fictional_disclaimer():
 def test_no_sources_block_when_no_citations():
     assert format_sources_block([]) == ""
     assert format_answer_with_sources("Answer.", []) == "Answer."
+
+
+# ---------- Shared display rule ----------
+
+@pytest.mark.parametrize("raw, shown", [
+    ("TRANSACTION REFUND POLICY", "Transaction Refund Policy"),
+    ("STATUS TRACKING", "Status Tracking"),
+    ("Mixed Case", "Mixed Case"),
+    ("already title", "already title"),
+    ("POL-002", "Pol-002"),
+    ("", ""),
+    (None, None),
+])
+def test_display_case(raw, shown):
+    assert display_case(raw) == shown
+
+
+def test_ui_uses_the_single_shared_display_rule():
+    import ui.components as components
+    import ui.policy_data as policy_data
+
+    assert components.display_case is display_case
+    assert policy_data.display_case is display_case

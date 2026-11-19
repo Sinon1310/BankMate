@@ -13,13 +13,14 @@ A conversational banking assistant built with **LangChain, Groq and Retrieval-Au
 
 ## Highlights
 
-- **Web app** — a Streamlit workspace with a home page, a multi-conversation AI assistant, a Customer Explorer and Transaction Analytics, with responsive layouts and a consistent design system.
+- **Web app** — a Streamlit workspace with a home page, a multi-conversation AI assistant, a Customer Explorer, Transaction Analytics and Policy Intelligence, with responsive layouts and a consistent design system.
 - **Customer Explorer & Transaction Analytics** — searchable customer profiles, metrics taken from the same tool the assistant uses, merchant / daily / per-customer charts, and filters that scope every figure on the page. Net transaction flow is always labelled as credits minus debits, never as a balance.
 - **Tool calling** — the model retrieves customer profiles and transactions and computes debit, credit and net transaction flow in Python rather than estimating figures.
 - **RAG over policy documents** — section-aware chunking, Sentence Transformer embeddings and ChromaDB retrieval with a similarity-distance threshold.
 - **Validated citations** — the model declares which policies it used; BankMate keeps only IDs that were actually retrieved in that turn, and shows no sources when an answer isn't supported by the policies.
-- **Grounding check** — contact channels (phone, chat, branch, email, app…) that don't appear in the retrieved evidence trigger a revision before the answer is shown.
+- **Grounding check** — contact channels (phone, chat, branch, email, app…) and procedural details such as where a refund is credited, timeframes or fees that don't appear in the retrieved evidence trigger a revision; if a detail isn't in the policy, the answer says "The policy does not specify …".
 - **Isolated conversation memory** — follow-ups such as "what was *his* total debit?" resolve within a conversation; separate conversations never share context.
+- **Policy Intelligence** — a searchable policy library with readable, section-by-section policy pages; passage search over the same index and threshold the assistant cites from; and one-click hand-off to the assistant. Cited sources in the chat open the matching policy.
 - **Tested** — offline pytest suite with fake models and tools, plus Streamlit `AppTest` UI tests. No API key needed to run it.
 
 ## Screenshots
@@ -27,6 +28,10 @@ A conversational banking assistant built with **LangChain, Groq and Retrieval-Au
 | AI Assistant with validated sources | Mobile |
 |---|---|
 | <img src="docs/screenshots/assistant.png" alt="Assistant conversation with a follow-up question and two cited policies" width="100%"> | <img src="docs/screenshots/mobile.png" alt="Assistant answer with a cited refund policy on a mobile screen" width="260"> |
+
+| Transaction Analytics | Customer Explorer | Policy Intelligence |
+|---|---|---|
+| <img src="docs/screenshots/analytics.png" alt="Analytics page with filters, KPIs and merchant, daily and per-customer charts" width="100%"> | <img src="docs/screenshots/customers.png" alt="Customer profile with metrics and transaction history" width="100%"> | <img src="docs/screenshots/policies.png" alt="Card dispute policy page with sections and ask actions" width="100%"> |
 
 ## Architecture
 
@@ -48,7 +53,7 @@ flowchart TD
 
     C --> A
     P --> A
-    A --> G[Grounding check<br/>unsupported channels]
+    A --> G[Grounding check<br/>unsupported channels & details]
     G --> S[Citation validation<br/>declared ∩ retrieved]
     S --> UI
 ```
@@ -57,7 +62,7 @@ flowchart TD
 
 1. The model chooses tools; customer tools read the CSVs, and `search_banking_policies` retrieves policy chunks within a distance threshold.
 2. For policy answers, the model ends its reply with `CITED_POLICIES: POL-xxx` or `CITED_POLICIES: NONE`.
-3. **Grounding check** (`app/grounding.py`): contact channels named in the answer are compared with the retrieved evidence and customer data. Unsupported ones trigger one revision; remaining example lists are removed without deleting whole sentences.
+3. **Grounding check** (`app/grounding.py`): contact channels are compared with the retrieved evidence and customer data, and procedural details (where a refund is credited, timeframes, fees) with the retrieved policy evidence. Anything unsupported triggers one revision; an unsupported detail that survives is replaced with "The policy does not specify …".
 4. **Citation validation** (`app/citations.py`): declared IDs are intersected with the sources retrieved in that turn. A missing marker or `NONE` yields no sources (fail closed), so fabricated or unused policies are never shown.
 5. The UI renders the answer and policy-level sources with the fictional-policy disclaimer.
 
@@ -98,8 +103,9 @@ BankMate/
 │   ├── state.py               # Conversation store and cross-page prompt hand-off
 │   ├── data.py                # Read-only data views (reuses app.data_loader and the metrics tool)
 │   ├── charts.py              # Altair charts in the design system
+│   ├── policy_data.py         # Policy catalogue, keyword search and passage retrieval (reuses the RAG tool)
 │   ├── assets/                # Logo
-│   └── views/                 # home.py, assistant.py, customers.py, analytics.py
+│   └── views/                 # home.py, assistant.py, customers.py, analytics.py, policies.py
 ├── tests/                     # Offline backend and UI tests
 ├── data/                      # Synthetic customers, transactions, RAG evaluation set
 ├── knowledge/policies/        # Fictional policy documents
@@ -143,7 +149,7 @@ python -m app.vector_store
 streamlit run streamlit_app.py
 ```
 
-Open http://localhost:8501. If `GROQ_API_KEY` is missing, the home page still loads and the assistant shows an "unavailable" state instead of failing.
+Open http://localhost:8501. If `GROQ_API_KEY` is missing, Home, Customer Explorer, Transaction Analytics and Policy Intelligence (including passage search) still work; only the assistant shows an "unavailable" state.
 
 ### Run the terminal chat
 
@@ -169,7 +175,7 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
-The suite runs offline: the assistant is exercised with scripted fake models and tools, and UI flows run through Streamlit's `AppTest` with a fake backend. It covers citation selection, duplicate and missing metadata, unsupported questions, grounding and cleanup, conversation isolation, retry and unavailable states.
+The suite runs offline: the assistant is exercised with scripted fake models and tools, and UI flows run through Streamlit's `AppTest` with a fake backend. It covers citation selection, duplicate and missing metadata, unsupported questions, grounding and cleanup, conversation isolation, retry and unavailable states, analytics totals cross-checked against the metrics tool, and the policy catalogue checked against the raw policy files. Policy passage search is tested with a fake retrieval tool, so ChromaDB isn't required.
 
 Retrieval quality is measured separately against `data/rag_evaluation.csv` (uses the local ChromaDB store, no LLM calls):
 
@@ -184,11 +190,11 @@ BankMate is an educational and portfolio project. It uses synthetic data and fic
 
 - Customer and transaction data are CSV files; conversation memory is in-process and resets when the app restarts.
 - Citations are policy-level; the model does not report which sections it relied on.
-- The grounding check targets contact channels; other procedural details rely on prompt instructions.
+- Citations come only from policies retrieved in the same answer, so a follow-up answered from earlier results (without a new search) shows no Sources card.
+- The code-level grounding check covers contact channels and specific procedural details (refund destination, timeframes, fees); other unsupported claims rely on the system prompt's policy-grounding rules.
 
 ## Roadmap
 
-- Policy Intelligence page with document browsing and retrieval search
 - Persistent conversations and structured database storage
 - API layer and deployment configuration
 

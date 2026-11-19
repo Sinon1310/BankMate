@@ -375,8 +375,10 @@ def test_customer_data_supports_channel_like_words(session_id):
         tool_call("search_banking_policies", {"question": "refund"}, "c1"),
         tool_call("get_customer_transactions", {"customer_id": "C101"}, "c2"),
         AIMessage(content=(
-            "C101's INR 300 payment to Branch Bakery can be refunded to the "
-            "original payment method.\nCITED_POLICIES: POL-002"
+            # Supported claim only: the point of this test is that the
+            # merchant name "Branch Bakery" is not treated as a channel.
+            "C101's INR 300 payment to Branch Bakery can be raised as a "
+            "refund request.\nCITED_POLICIES: POL-002"
         )),
     ])
     result = assistant.ask_bankmate_with_sources(
@@ -437,3 +439,210 @@ def test_grounding_check_skipped_without_policy_search(session_id):
     )
     assert model.calls == 1
     assert result["answer"] == "I can't place a call for you."
+
+
+# --- Regression: unsupported procedural details (POL-002) -----------------
+
+from pathlib import Path
+
+from app.document_loader import split_into_sections
+
+_REFUND_TEXT = (Path(__file__).resolve().parent.parent / "knowledge" / "policies"
+                / "refund_policy.txt").read_text(encoding="utf-8")
+_POL_002 = dict(split_into_sections(_REFUND_TEXT))
+
+POL_002_RESULT = json.dumps({
+    "status": "SUCCESS",
+    "sources": [
+        {"policy_id": "POL-002", "policy_name": "TRANSACTION REFUND POLICY", "version": "1.0",
+         "section": section, "source_file": "refund_policy.txt"}
+        for section in ("PROCESSING", "PURPOSE", "TRACKING")
+    ],
+    "evidence": [
+        {"policy_id": "POL-002", "section": section, "content": _POL_002[section]}
+        for section in ("PROCESSING", "PURPOSE", "TRACKING")
+    ],
+})
+
+INVENTED_REFUND_ANSWER = (
+    "When a refund is approved, it is processed through the payment processing "
+    "workflow. The refund is assigned a unique reference ID and its status is "
+    "updated to Processing before it is completed and credited back to the "
+    "customer's original payment method.\nCITED_POLICIES: POL-002"
+)
+
+NOT_SPECIFIED = "The policy does not specify where the refunded amount is credited."
+
+
+def refund_tools():
+    return {"search_banking_policies": FakeTool(POL_002_RESULT)}
+
+
+def test_direct_question_unsupported_refund_destination_is_revised(session_id):
+    model = FakeModel([
+        tool_call("search_banking_policies", {"question": "refund approved"}),
+        AIMessage(content=INVENTED_REFUND_ANSWER),
+        AIMessage(content=(
+            "When a refund is approved, it is processed through the appropriate "
+            "payment processing workflow. Each refund has a unique reference ID and "
+            "is tracked as Pending, Processing, Completed or Rejected. "
+            + NOT_SPECIFIED + "\nCITED_POLICIES: POL-002"
+        )),
+    ])
+    result = assistant.ask_bankmate_with_sources(
+        "What happens when a refund is approved?", session_id=session_id,
+        model=model, tools=refund_tools(),
+    )
+
+    assert model.calls == 3
+    assert "original payment method" not in result["answer"]
+    assert "credited back" not in result["answer"]
+    assert NOT_SPECIFIED in result["answer"]
+    assert [s["policy_id"] for s in result["sources"]] == ["POL-002"]
+    # History holds the grounded answer, so follow-ups don't build on the claim.
+    assert "original payment method" not in assistant.conversation_sessions[session_id][-1].content
+
+
+def test_revision_prompt_asks_for_explicit_not_specified(session_id):
+    seen = []
+
+    class RecordingModel(FakeModel):
+        def invoke(self, messages):
+            seen.append(messages[-1].content)
+            return super().invoke(messages)
+
+    model = RecordingModel([
+        tool_call("search_banking_policies", {"question": "refund"}),
+        AIMessage(content=INVENTED_REFUND_ANSWER),
+        AIMessage(content="Processed through the payment processing workflow.\nCITED_POLICIES: POL-002"),
+    ])
+    assistant.ask_bankmate_with_sources("refund?", session_id=session_id, model=model, tools=refund_tools())
+
+    correction = seen[-1]
+    assert "where the refunded amount is credited" in correction
+    assert "The policy does not specify" in correction
+
+
+def test_unrevised_claim_is_replaced_with_not_specified(session_id):
+    model = FakeModel([
+        tool_call("search_banking_policies", {"question": "refund"}),
+        AIMessage(content=INVENTED_REFUND_ANSWER),
+        AIMessage(content=INVENTED_REFUND_ANSWER),  # model ignores the revision request
+    ])
+    result = assistant.ask_bankmate_with_sources(
+        "refund?", session_id=session_id, model=model, tools=refund_tools(),
+    )
+
+    assert result["answer"] == (
+        "When a refund is approved, it is processed through the payment processing "
+        "workflow. " + NOT_SPECIFIED
+    )
+    assert [s["policy_id"] for s in result["sources"]] == ["POL-002"]
+
+
+def test_question_about_unspecified_detail_gets_explicit_answer(session_id):
+    model = FakeModel([
+        tool_call("search_banking_policies", {"question": "where is refund credited"}),
+        AIMessage(content=NOT_SPECIFIED + "\nCITED_POLICIES: POL-002"),
+    ])
+    result = assistant.ask_bankmate_with_sources(
+        "Where is the refunded amount credited?", session_id=session_id,
+        model=model, tools=refund_tools(),
+    )
+
+    assert model.calls == 2  # already grounded: no revision
+    assert result["answer"] == NOT_SPECIFIED
+
+
+def test_follow_up_from_memory_is_checked(session_id):
+    tools = refund_tools()
+    run(session_id, [
+        tool_call("search_banking_policies", {"question": "refund approved"}),
+        AIMessage(content="It is processed through the payment processing workflow.\nCITED_POLICIES: POL-002"),
+    ], tools)
+
+    model = FakeModel([
+        # Follow-up answered from memory, no new tool call.
+        AIMessage(content="It will be credited to the original payment method within 5-7 business days."),
+        AIMessage(content=NOT_SPECIFIED + " The policy does not specify a timeframe."),
+    ])
+    result = assistant.ask_bankmate_with_sources(
+        "And where does the money go, and how long does it take?",
+        session_id=session_id, model=model, tools=tools,
+    )
+
+    assert model.calls == 2
+    assert "original payment method" not in result["answer"]
+    assert "5-7" not in result["answer"]
+    assert NOT_SPECIFIED in result["answer"]
+
+
+def test_follow_up_that_searches_again_is_checked(session_id):
+    tools = refund_tools()
+    run(session_id, [
+        tool_call("search_banking_policies", {"question": "refund"}, "c1"),
+        AIMessage(content="It is processed through the workflow.\nCITED_POLICIES: POL-002"),
+    ], tools)
+
+    model = FakeModel([
+        tool_call("search_banking_policies", {"question": "refund destination"}, "c2"),
+        AIMessage(content="Refunds are returned to your card.\nCITED_POLICIES: POL-002"),
+        AIMessage(content="Refunds are returned to your card.\nCITED_POLICIES: POL-002"),
+    ])
+    result = assistant.ask_bankmate_with_sources(
+        "Where do refunds go?", session_id=session_id, model=model, tools=tools,
+    )
+
+    assert result["answer"] == NOT_SPECIFIED
+    assert [s["policy_id"] for s in result["sources"]] == ["POL-002"]
+
+
+def test_customer_data_turn_is_not_detail_checked(session_id):
+    tools = {
+        **refund_tools(),
+        "get_customer_transactions": FakeTool(json.dumps([
+            {"transaction_id": "T003", "customer_id": "C101", "transaction_type": "Credit",
+             "amount": "25000", "merchant": "Salary"}
+        ])),
+    }
+    run(session_id, [
+        tool_call("search_banking_policies", {"question": "refund"}),
+        AIMessage(content="Processed through the workflow.\nCITED_POLICIES: POL-002"),
+    ], tools)
+
+    model = FakeModel([
+        tool_call("get_customer_transactions", {"customer_id": "C101"}),
+        AIMessage(content="His salary of INR 25,000 was credited to his account on 3 Nov."),
+    ])
+    result = assistant.ask_bankmate_with_sources(
+        "Show C101's credits", session_id=session_id, model=model, tools=tools,
+    )
+
+    assert model.calls == 2  # no revision request on customer-data answers
+    assert result["answer"] == "His salary of INR 25,000 was credited to his account on 3 Nov."
+
+
+def test_policy_grounding_rules_are_in_system_prompt():
+    prompt = assistant.system_message.content
+    assert "POLICY GROUNDING RULES" in prompt
+    assert "The policy does not specify <detail>." in prompt
+
+
+def test_grounded_not_specified_answer_needs_no_revision(session_id):
+    answer = (
+        "Once approved, the refund is processed through the appropriate payment "
+        "processing workflow. The policy does not specify any fees or charges, "
+        "a timeframe, or where the refunded amount is credited.\nCITED_POLICIES: POL-002"
+    )
+    model = FakeModel([
+        tool_call("search_banking_policies", {"question": "refund fees and timing"}),
+        AIMessage(content=answer),
+    ])
+    result = assistant.ask_bankmate_with_sources(
+        "Are there refund fees, and how long does it take?", session_id=session_id,
+        model=model, tools=refund_tools(),
+    )
+
+    assert model.calls == 2  # no revision request
+    assert result["answer"] == answer.split("\nCITED_POLICIES")[0]
+    assert [s["policy_id"] for s in result["sources"]] == ["POL-002"]

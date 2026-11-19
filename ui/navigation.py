@@ -46,7 +46,17 @@ ANALYTICS = {
     "default": False,
 }
 
-PAGES = [HOME, ASSISTANT, CUSTOMERS, ANALYTICS]
+POLICIES = {
+    "path": "ui/views/policies.py",
+    "title": "Policy Intelligence",
+    "short": "Policies",
+    "icon": ":material/menu_book:",
+    "url_path": "policies",
+    "section": "Workspace",
+    "default": False,
+}
+
+PAGES = [HOME, ASSISTANT, CUSTOMERS, ANALYTICS, POLICIES]
 
 
 def sections():

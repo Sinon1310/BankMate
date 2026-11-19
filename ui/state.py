@@ -150,6 +150,23 @@ def retry_last(conversation):
     return False
 
 
+# ---------- Policy selection (shared by Assistant and Policy pages) ----------
+
+SELECTED_POLICY = "selected_policy_id"
+
+
+def select_policy(policy_id):
+    st.session_state[SELECTED_POLICY] = policy_id
+
+
+def selected_policy():
+    return st.session_state.get(SELECTED_POLICY)
+
+
+def clear_policy():
+    st.session_state[SELECTED_POLICY] = None
+
+
 # ---------- Cross-page prompt hand-off ----------
 
 def queue_prompt(prompt, new_conversation=False):

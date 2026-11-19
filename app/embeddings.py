@@ -1,7 +1,14 @@
 
+from functools import lru_cache
+
 from langchain_huggingface import HuggingFaceEmbeddings
 
 
+# Loading the model takes ~3s, and retriever.get_vector_store() asks for
+# it on every search. It is stateless after loading, so one instance per
+# process is reused. Only the model is cached — Chroma clients are still
+# created per call, so a rebuilt vector store is picked up immediately.
+@lru_cache(maxsize=1)
 def get_embedding_model():
     embeddings = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2",

@@ -86,6 +86,16 @@ def go_to_assistant(prompt=None):
     st.switch_page(navigation.ASSISTANT["path"])
 
 
+def go_to_policy(policy_id):
+    """
+    Open a policy's detail view. Uses session state + switch_page (not a
+    URL link) so the current browser session and conversations survive.
+    """
+
+    state.select_policy(policy_id)
+    st.switch_page(navigation.POLICIES["path"])
+
+
 def sidebar_note(title, body):
     with st.sidebar:
         html(

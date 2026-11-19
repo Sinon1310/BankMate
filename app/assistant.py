@@ -14,9 +14,12 @@ from app.citations import (
     select_citations
 )
 from app.grounding import (
+    DETAIL_DESCRIPTIONS,
     collect_evidence_text,
     find_unsupported_channels,
-    remove_unsupported_examples
+    find_unsupported_details,
+    remove_unsupported_examples,
+    replace_unsupported_detail_sentences
 )
 from app.llm import get_assistant_model, tool_map
 
@@ -32,8 +35,9 @@ _model = None
 # Store conversation history separately for each session.
 conversation_sessions = {}
 
-# Per session: whether the policy tool has been used, and the text that
-# can support channel mentions (policy evidence + customer tool results).
+# Per session: whether the policy tool has been used, the retrieved
+# policy evidence (supports procedural details), and all supporting text
+# (policy evidence + customer tool results; supports channel mentions).
 # Kept for the whole session so follow-up answers are also checked.
 grounding_context = {}
 
@@ -116,6 +120,19 @@ CONVERSATION MEMORY RULES:
     Retrieve fresh customer data when needed.
 37. Do not mix information belonging to different customers.
 
+POLICY GROUNDING RULES:
+38. In policy answers, state only what the retrieved policy text says.
+    Do not complete a procedure with steps, outcomes, destinations,
+    timeframes, fees or notifications that the text does not state.
+    For example, do not say where a refunded amount is credited, or
+    how long something takes, unless the retrieved text says so.
+39. If the user asks about a detail that the retrieved policy text does
+    not cover, say explicitly: "The policy does not specify <detail>."
+    Do not infer it from general banking practice.
+40. Paraphrase the policy closely; when unsure, use the policy's wording.
+41. These rules also apply to follow-up questions answered from
+    earlier policy results in the conversation.
+
 """)
 
 
@@ -137,33 +154,52 @@ def _ensure_markers(text, markers):
     return text
 
 
-def _enforce_channel_grounding(answer, support_text, messages, model):
+def _enforce_grounding(answer, support_text, evidence_text, messages, model,
+                       check_details=True):
     """
-    If the answer names contact channels absent from the supporting
-    text, ask the model once to revise. If the revision still names
-    them, remove only parenthetical asides / example clauses naming
-    them. Sentences are never deleted: if an unsupported channel still
-    remains, the answer is kept and a warning is printed.
+    Check an answer that may rely on policy content:
+    - contact channels absent from the supporting text, and
+    - procedural details (refund destination, timeframe, fees) absent
+      from the retrieved policy evidence (only when check_details).
+
+    Any issue triggers one revision request. If problems remain:
+    - channels: only example lists / parentheticals naming them are
+      removed (sentences kept; a warning is printed);
+    - details: each sentence stating one is replaced with an explicit
+      "The policy does not specify ..." statement.
     Returns the final answer text (CITED_POLICIES marker preserved).
     """
 
-    unsupported = find_unsupported_channels(answer, support_text)
+    channels = find_unsupported_channels(answer, support_text)
+    details = find_unsupported_details(answer, evidence_text) if check_details else []
 
-    if not unsupported:
+    if not channels and not details:
         return answer
 
-    print(f"\n[Grounding check: unsupported channels {unsupported}]")
+    print(f"\n[Grounding check: unsupported channels {channels} details {details}]")
 
     original_markers = [
         match.group(0).strip() for match in MARKER_PATTERN.finditer(answer)
     ]
 
+    problems = []
+    if channels:
+        problems.append(
+            "It mentions these contact channels, which the retrieved policy "
+            f"documents do not specify: {', '.join(channels)}. Remove them."
+        )
+    if details:
+        described = ", ".join(DETAIL_DESCRIPTIONS[d] for d in details)
+        problems.append(
+            "It states details the retrieved policy text does not contain "
+            f"({described}). Remove those claims. If the user asked about "
+            'them, say explicitly "The policy does not specify ..." instead.'
+        )
+
     correction = HumanMessage(content=(
-        "Revise your previous answer. It mentions these contact "
-        f"channels: {', '.join(unsupported)}. The retrieved policy "
-        "documents do not specify them. Remove them and use only the "
-        "wording found in the retrieved policy text. Do not call tools. "
-        "Keep the CITED_POLICIES line."
+        "Revise your previous answer. " + " ".join(problems) + " "
+        "Use only statements found in the retrieved policy text. "
+        "Do not call tools. Keep the CITED_POLICIES line."
     ))
 
     revised = answer
@@ -178,26 +214,32 @@ def _enforce_channel_grounding(answer, support_text, messages, model):
         print(f"\n[Grounding check: revision failed: {error}]")
 
     revised = _ensure_markers(revised, original_markers)
-    remaining = find_unsupported_channels(revised, support_text)
 
-    if not remaining:
-        return revised
-
-    cleaned = remove_unsupported_examples(revised, remaining)
-    body, _ = extract_cited_policy_ids(cleaned)
-
-    if not body:
-        cleaned = revised
-
-    remaining = find_unsupported_channels(cleaned, support_text)
-
-    if remaining:
+    remaining_details = (
+        find_unsupported_details(revised, evidence_text) if check_details else []
+    )
+    if remaining_details:
+        revised = replace_unsupported_detail_sentences(revised, remaining_details)
         print(
-            "\n[Grounding check: WARNING unsupported channels remain "
-            f"{remaining}; answer kept to avoid removing valid content]"
+            "\n[Grounding check: replaced unsupported details "
+            f"{remaining_details} with 'policy does not specify' statements]"
         )
 
-    return _ensure_markers(cleaned, original_markers)
+    remaining_channels = find_unsupported_channels(revised, support_text)
+
+    if remaining_channels:
+        cleaned = remove_unsupported_examples(revised, remaining_channels)
+        body, _ = extract_cited_policy_ids(cleaned)
+        revised = cleaned if body else revised
+
+        remaining_channels = find_unsupported_channels(revised, support_text)
+        if remaining_channels:
+            print(
+                "\n[Grounding check: WARNING unsupported channels remain "
+                f"{remaining_channels}; answer kept to avoid removing valid content]"
+            )
+
+    return _ensure_markers(revised, original_markers)
 
 
 def ask_bankmate_with_sources(
@@ -223,9 +265,12 @@ def ask_bankmate_with_sources(
     messages = conversation_sessions[session_id]
     context = grounding_context.setdefault(
         session_id,
-        {"policy_tool_used": False, "support_texts": []}
+        {"policy_tool_used": False, "support_texts": [], "evidence_texts": []}
     )
+    context.setdefault("evidence_texts", [])
     retrieved_sources = []
+    policy_tool_this_turn = False
+    other_tool_this_turn = False
 
     messages.append(HumanMessage(content=question))
 
@@ -239,11 +284,18 @@ def ask_bankmate_with_sources(
             raw_answer = str(response.content)
 
             if context["policy_tool_used"]:
-                raw_answer = _enforce_channel_grounding(
+                # Procedural details are checked on policy turns and on
+                # follow-ups answered from memory, but not on turns that
+                # only fetched customer data.
+                check_details = policy_tool_this_turn or not other_tool_this_turn
+
+                raw_answer = _enforce_grounding(
                     raw_answer,
                     "\n".join(context["support_texts"]),
+                    "\n".join(context["evidence_texts"]),
                     list(messages),
-                    model
+                    model,
+                    check_details=check_details,
                 )
                 # Keep history consistent with what the user sees.
                 messages[-1] = AIMessage(content=raw_answer)
@@ -276,9 +328,12 @@ def ask_bankmate_with_sources(
 
                 if tool_name == POLICY_TOOL_NAME:
                     context["policy_tool_used"] = True
+                    policy_tool_this_turn = True
                     collect_sources(retrieved_sources, result)
                     collect_evidence_text(context["support_texts"], result)
+                    collect_evidence_text(context["evidence_texts"], result)
                 else:
+                    other_tool_this_turn = True
                     # Customer data can legitimately contain words such
                     # as merchant names that look like channels.
                     context["support_texts"].append(str(result))

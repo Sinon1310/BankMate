@@ -119,8 +119,21 @@ def render_message(index, message):
         with st.chat_message("assistant", avatar=ASSISTANT_AVATAR):
             st.markdown(message["content"])
 
-            if not message.get("error"):
-                ui.sources_block(message.get("sources"))
+            if not message.get("error") and message.get("sources"):
+                ui.sources_block(message["sources"])
+
+                # Open each cited policy in the library (same session, so
+                # this conversation is still here when the user returns).
+                with st.container(horizontal=True, gap="small", key=f"bm-srclinks-{index}"):
+                    for citation in message["sources"]:
+                        policy_id = citation.get("policy_id")
+                        if policy_id and st.button(
+                            f"Open {policy_id}",
+                            key=f"src-open-{index}-{policy_id}",
+                            icon=":material/menu_book:",
+                            type="tertiary",
+                        ):
+                            ui.go_to_policy(policy_id)
 
 
 with st.container(key="bm-thread"):

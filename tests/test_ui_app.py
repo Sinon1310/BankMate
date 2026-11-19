@@ -7,6 +7,7 @@ on behaviour: which question reaches the backend, with which session_id,
 and what the user sees.
 """
 
+import json
 import sys
 from datetime import date
 from pathlib import Path
@@ -15,6 +16,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 import app.assistant as assistant_module
+import app.tools as tools_module
 from ui import navigation, state
 
 
@@ -120,6 +122,7 @@ def test_only_implemented_pages_are_registered():
         "ui/views/assistant.py",
         "ui/views/customers.py",
         "ui/views/analytics.py",
+        "ui/views/policies.py",
     ]
     for path in paths:
         assert (root / path).is_file()
@@ -450,3 +453,198 @@ def test_analytics_empty_selection_shows_empty_state():
     assert not at.exception, at.exception
     assert "No transactions match these filters" in page_text(at)
     assert not at.get("arrow_vega_lite_chart")
+
+
+# ---------- Policy Intelligence (Stage 4) ----------
+
+POLICIES = navigation.POLICIES["path"]
+
+
+class FakeSearchTool:
+    """Stands in for app.tools.search_banking_policies (no ChromaDB)."""
+
+    def __init__(self, result=None, error=None):
+        self.result = result
+        self.error = error
+        self.calls = []
+
+    def invoke(self, args):
+        self.calls.append(args["question"])
+        if self.error:
+            raise self.error
+        return json.dumps(self.result)
+
+
+DISPUTE_EVIDENCE = {
+    "status": "SUCCESS",
+    "evidence": [{
+        "policy_id": "POL-001",
+        "policy_name": "CARD DISPUTE HANDLING POLICY",
+        "version": "1.0",
+        "section": "REQUIRED INFORMATION",
+        "source_file": "card_dispute_policy.txt",
+        "distance": 0.65,
+        "content": "The customer should provide:\n1. Customer ID.\n2. Card or account reference.",
+    }],
+}
+
+
+@pytest.fixture
+def search_tool(monkeypatch):
+    tool = FakeSearchTool(DISPUTE_EVIDENCE)
+    monkeypatch.setattr(tools_module, "search_banking_policies", tool)
+    return tool
+
+
+def open_policy(policy_id):
+    at = run_app()
+    at.query_params["policy"] = policy_id
+    at.switch_page(POLICIES).run()
+    assert not at.exception, at.exception
+    return at
+
+
+def test_policy_library_lists_documents_from_files():
+    at = open_page(POLICIES)
+    text = page_text(at)
+
+    for policy_id, name in (
+        ("POL-001", "Card Dispute Handling Policy"),
+        ("POL-002", "Transaction Refund Policy"),
+        ("POL-003", "Transaction Security Guidelines"),
+    ):
+        assert policy_id in text and name in text
+    assert "3 policies" in text
+    assert "card_dispute_policy.txt" in text
+
+
+def test_policy_filter_and_scope():
+    at = open_page(POLICIES)
+    at.text_input(key="policy-filter").set_value("otp").run()
+
+    assert "1 policy" in page_text(at)
+    assert [b.key for b in at.button if b.key and b.key.startswith("policy-open-")] == ["policy-open-POL-003"]
+    assert "Customer Protection" in page_text(at)  # matched section snippet
+
+    at.selectbox(key="policy-scope").set_value("Titles & IDs").run()
+    assert "No policies match" in page_text(at)
+
+
+def test_read_policy_opens_detail_and_back_returns():
+    at = open_page(POLICIES)
+    at.button(key="policy-open-POL-001").click().run()
+    text = page_text(at)
+
+    assert not at.exception, at.exception
+    assert 'class="bm-policy-title">Card Dispute Handling Policy' in text
+    for section in ("Dispute Initiation", "Required Information", "Status Tracking", "Resolution"):
+        assert f"<h2>{section}</h2>" in text
+    assert "<li>Merchant name.</li>" in text
+    assert "Fictional policy" in text
+    assert "DOCUMENT ID" not in text  # header shown as metadata, not content
+
+    at.button(key="policy-back").click().run()
+    assert "3 policies" in page_text(at)
+
+
+def test_deep_link_opens_policy_and_unknown_id_falls_back():
+    at = open_policy("POL-003")
+    assert 'class="bm-policy-title">Transaction Security Guidelines' in page_text(at)
+
+    at = open_policy("POL-999")
+    assert any("No policy with ID" in w.value for w in at.warning)
+    assert "3 policies" in page_text(at)
+
+
+def test_policy_suggestion_opens_assistant(backend):
+    at = open_policy("POL-002")
+    at.button(key="chip-btn-policy-q-0").click().run()
+
+    assert not at.exception, at.exception
+    assert backend.questions() == ["Summarise the Transaction Refund Policy."]
+
+
+def test_policy_question_box_includes_policy_context(backend):
+    at = open_policy("POL-001")
+    at.chat_input(key="policy-ask-input").set_value("How is status tracked?").run()
+
+    assert backend.questions() == [
+        "Using the Card Dispute Handling Policy (POL-001): How is status tracked?"
+    ]
+
+
+def test_policy_card_ask_button(backend):
+    at = open_page(POLICIES)
+    at.button(key="policy-ask-POL-003").click().run()
+
+    assert backend.questions() == ["Summarise the Transaction Security Guidelines (POL-003)."]
+
+
+def test_index_search_shows_passages_and_hands_off(search_tool, backend):
+    at = open_page(POLICIES)
+    at.text_input(key="policy-retrieval-input").set_value("What is needed to raise a dispute?").run()
+    text = page_text(at)
+
+    assert search_tool.calls == ["What is needed to raise a dispute?"]
+    assert "1 passage" in text and "Required Information" in text and "distance 0.65" in text
+
+    at.button(key="passage-ask").click().run()
+    assert backend.questions() == ["What is needed to raise a dispute?"]
+
+
+def test_index_search_result_opens_policy(search_tool):
+    at = open_page(POLICIES)
+    at.text_input(key="policy-retrieval-input").set_value("dispute details").run()
+    at.button(key="passage-open-0").click().run()
+
+    assert 'class="bm-policy-title">Card Dispute Handling Policy' in page_text(at)
+
+
+def test_index_search_reruns_do_not_repeat_retrieval(search_tool):
+    at = open_page(POLICIES)
+    at.text_input(key="policy-retrieval-input").set_value("dispute details").run()
+    at.text_input(key="policy-filter").set_value("refund").run()
+
+    assert search_tool.calls == ["dispute details"]
+
+
+def test_index_search_no_results_state(monkeypatch):
+    monkeypatch.setattr(
+        tools_module, "search_banking_policies",
+        FakeSearchTool({"status": "NO_RELEVANT_POLICY_FOUND", "evidence": []}),
+    )
+    at = open_page(POLICIES)
+    at.text_input(key="policy-retrieval-input").set_value("home loan rates").run()
+
+    assert "No sufficiently relevant passages" in page_text(at)
+    assert not [b for b in at.button if b.key == "passage-ask"]
+
+
+def test_index_search_error_state(monkeypatch):
+    monkeypatch.setattr(
+        tools_module, "search_banking_policies",
+        FakeSearchTool(error=RuntimeError("collection missing")),
+    )
+    at = open_page(POLICIES)
+    at.text_input(key="policy-retrieval-input").set_value("refunds").run()
+
+    assert not at.exception, at.exception
+    assert any("could not be searched" in e.value and "collection missing" in e.value for e in at.error)
+
+
+def test_assistant_source_opens_policy_and_conversation_survives(backend):
+    at = open_assistant()
+    send(at, "Refund question")
+
+    at.button(key="src-open-1-POL-002").click().run()
+    assert not at.exception, at.exception
+    assert 'class="bm-policy-title">Transaction Refund Policy' in page_text(at)
+
+    at.switch_page(ASSISTANT).run()
+    assert "Answer to: Refund question" in page_text(at)
+
+
+def test_policy_pages_work_without_assistant_backend(monkeypatch):
+    monkeypatch.setitem(sys.modules, "app.assistant", None)
+    at = open_policy("POL-002")
+    assert 'class="bm-policy-title">Transaction Refund Policy' in page_text(at)

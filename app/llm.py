@@ -9,6 +9,7 @@ from app.tools import (
     get_customer_profile,
     get_customer_transactions,
     get_customer_metrics,
+    get_customer_disputes,
     search_banking_policies
 )
 
@@ -91,6 +92,7 @@ tools = [
     get_customer_profile,
     get_customer_transactions,
     get_customer_metrics,
+    get_customer_disputes,
     search_banking_policies
 ]
 

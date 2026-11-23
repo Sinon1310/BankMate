@@ -40,6 +40,13 @@ from app.errors import (
 )
 from app.history import trim_to_recent_turns
 from app.llm import env_number, get_assistant_model, tool_map
+from app.tool_args import (
+    ACCESS_DENIED,
+    CUSTOMER_TOOLS,
+    allowed_arguments,
+    validate_customer_tool_args,
+)
+from app.tools import customer_account_ids
 from app.security import (
     MAX_QUESTION_CHARS,
     clean_question,
@@ -53,11 +60,27 @@ from app.vector_store import PolicyIndexError
 
 POLICY_TOOL_NAME = "search_banking_policies"
 
-CUSTOMER_TOOL_NAMES = {
-    "get_customer_profile",
-    "get_customer_transactions",
-    "get_customer_metrics",
-}
+# Customer tools and their permitted arguments are defined in app/tool_args.py.
+CUSTOMER_TOOL_NAMES = CUSTOMER_TOOLS
+
+
+def _with_ignored_notice(result, tool_name, count):
+    """
+    Tell the model that unsupported arguments were ignored, so it never
+    presents unfiltered results as filtered. Argument names are not echoed
+    (they are model output and may carry injected text).
+    """
+
+    notice = (f"{count} unsupported argument(s) were ignored, so these results are not filtered by them. "
+              f"Supported arguments: {', '.join(allowed_arguments(tool_name))}.")
+    try:
+        payload = json.loads(result)
+    except (TypeError, ValueError):
+        return f"{result}\n{notice}"
+    if isinstance(payload, dict):
+        payload["ignored_arguments_notice"] = notice
+        return json.dumps(payload, ensure_ascii=False)
+    return f"{result}\n{notice}"
 
 MAX_TOOL_STEPS = 5
 
@@ -538,6 +561,10 @@ def _answer(question, session_id, model, tools, messages, context, version, requ
         message.content for message in messages if isinstance(message, HumanMessage)
     )
 
+    # Identical validated customer-tool calls in this turn reuse the first
+    # result instead of re-reading data (the model sometimes repeats calls).
+    customer_results = {}
+
     def call_model(payload):
         try:
             return model.invoke(payload)
@@ -599,30 +626,34 @@ def _answer(question, session_id, model, tools, messages, context, version, requ
 
             selected_tool = tools.get(tool_name)
             blocked = None
+            dropped = ()
+            cache_key = None
 
             if tool_name in CUSTOMER_TOOL_NAMES:
-                raw_id = tool_args.get("customer_id") if isinstance(tool_args, dict) else None
-                customer_id = normalize_customer_id(raw_id)
+                # Authorization and every argument are validated before any
+                # customer data is read (app/tool_args.py): the customer must
+                # be one the user typed; filters must be well-formed; an
+                # account filter must belong to that customer; other
+                # identifiers are refused; harmless unknown arguments dropped.
+                checked = validate_customer_tool_args(
+                    tool_name, tool_args, allowed_customers, customer_account_ids)
 
-                if customer_id is None:
-                    blocked = json.dumps({
-                        "status": "INVALID_CUSTOMER_ID",
-                        "message": "Customer IDs look like C101. Ask the user for a valid customer ID.",
-                    })
-                elif customer_id not in allowed_customers:
-                    logger.warning(
-                        "Blocked %s for a customer the user has not referenced (session %s)",
-                        tool_name, session_id[:8],
-                    )
-                    blocked = json.dumps({
-                        "status": "ACCESS_DENIED",
-                        "message": (
-                            "This customer has not been referenced by the user in this "
-                            "conversation. Ask the user which customer ID they mean."
-                        ),
-                    })
+                if not checked.ok:
+                    if checked.status == ACCESS_DENIED:
+                        reason = ("an account filter not owned by the referenced customer"
+                                  if normalize_customer_id(tool_args.get("customer_id")) in allowed_customers
+                                  else "a customer the user has not referenced")
+                        logger.warning("Blocked %s for %s (session %s)", tool_name, reason, session_id[:8])
+                    else:
+                        logger.warning("Rejected %s arguments: %s (session %s)",
+                                       tool_name, checked.status, session_id[:8])
+                    blocked = checked.error
                 else:
-                    tool_args = {"customer_id": customer_id}
+                    tool_args, dropped = checked.args, checked.dropped
+                    if dropped:
+                        logger.info("Ignored %d unsupported argument(s) for %s (session %s)",
+                                    len(dropped), tool_name, session_id[:8])
+                    cache_key = (tool_name, json.dumps(tool_args, sort_keys=True))
 
             elif tool_name == POLICY_TOOL_NAME:
                 query = tool_args.get("question") if isinstance(tool_args, dict) else None
@@ -633,6 +664,9 @@ def _answer(question, session_id, model, tools, messages, context, version, requ
 
             elif blocked is not None:
                 result = blocked
+
+            elif cache_key is not None and cache_key in customer_results:
+                result = customer_results[cache_key]
 
             else:
                 try:
@@ -647,6 +681,11 @@ def _answer(question, session_id, model, tools, messages, context, version, requ
                     # never as "no relevant policy found".
                     kind = INDEX_UNAVAILABLE if isinstance(error, PolicyIndexError) else TOOL_FAILURE
                     raise AssistantError(kind, f"{tool_name}: {detail}") from error
+                if cache_key is not None:
+                    customer_results[cache_key] = result
+
+            if dropped and blocked is None and selected_tool is not None:
+                result = _with_ignored_notice(result, tool_name, len(dropped))
 
             # Classify the turn by the tool requested (run or blocked).
             if selected_tool is not None:

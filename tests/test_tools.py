@@ -459,6 +459,26 @@ def test_legacy_format_keeps_original_behaviour(monkeypatch, tmp_path):
     assert call(tools.get_customer_transactions, customer_id="C101", account_id="ACC1001")["status"] == "ACCESS_DENIED"
 
 
+def test_legacy_format_applies_supported_filters_and_refuses_the_rest(monkeypatch, tmp_path):
+    (tmp_path / "customers.csv").write_text(
+        "customer_id,customer_name,city,account_type\nC101,Arjun Mehta,Mumbai,Savings\n", encoding="utf-8")
+    (tmp_path / "transactions.csv").write_text(
+        "transaction_id,customer_id,transaction_date,transaction_type,amount,merchant\n"
+        "T001,C101,2026-11-01,Debit,2500,Amazon\nT003,C101,2026-11-03,Credit,25000,Salary\n", encoding="utf-8")
+    monkeypatch.setattr(dl, "_dataset", dl.load_dataset(tmp_path))
+    debits = call(tools.get_customer_transactions, customer_id="C101", transaction_type="Debit")
+    assert [r["transaction_id"] for r in debits] == ["T001"]
+    assert [r["transaction_id"] for r in call(tools.get_customer_transactions, customer_id="C101",
+                                               start_date="2026-11-02", end_date="2026-11-03")] == ["T003"]
+    assert call(tools.get_customer_transactions, customer_id="C101", min_amount=30000) == \
+        "No transactions match these filters for customer C101."
+    assert call(tools.get_customer_transactions, customer_id="C101", category="Dining")["status"] == "NOT_AVAILABLE"
+    november_3 = call(tools.get_customer_metrics, customer_id="C101", start_date="2026-11-03", end_date="2026-11-03")
+    assert (november_3["total_debit"], november_3["total_credit"], november_3["transaction_count"]) == ("0", "25000", 1)
+    assert call(tools.get_customer_metrics, customer_id="C101", start_date="2026-12-01") == \
+        "No transactions match these dates for customer C101."
+
+
 def test_fixture_metrics_keep_their_original_values():
     m = call(tools.get_customer_metrics, customer_id="C101")
     assert (D(m["total_debit"]), D(m["total_credit"]), D(m["net_transaction_flow"]), m["transaction_count"]) == (

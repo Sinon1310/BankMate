@@ -281,9 +281,10 @@ def test_unknown_tools_such_as_file_access_are_never_executed(sid):
     assert assistant.conversation_sessions[sid][-2].content == '{"error": "Unknown tool"}'
     assert result["answer"] == "I can't do that."
     # The only tools the model can ever run: no file, shell or network access.
+    # (Stage 1C gate 5 added the read-only get_customer_disputes.)
     assert set(assistant.tool_map) == {
         "get_customer_profile", "get_customer_transactions",
-        "get_customer_metrics", "search_banking_policies",
+        "get_customer_metrics", "get_customer_disputes", "search_banking_policies",
     }
 
 

@@ -136,6 +136,12 @@ def _accounts_of(customer_id):
     return {a["account_id"] for a in _index()["accounts"].get(customer_id, [])}
 
 
+def customer_account_ids(customer_id):
+    """The customer's account IDs (empty for the legacy format, which has no accounts)."""
+
+    return set() if _is_legacy() else _accounts_of(customer_id)
+
+
 def _validate(tool_name, raw_args):
     """
     Tool-level validation: the ID's format, every filter, and account
@@ -242,9 +248,38 @@ def get_customer_profile(customer_id: str) -> str:
 
 # ---------- Transactions ----------
 
-def _legacy_transactions(customer_id):
-    rows = data_loader.find_transactions(customer_id)
+LEGACY_UNSUPPORTED_FILTERS = ("category", "account_id")
+
+
+def _legacy_rows(args):
+    """
+    The legacy sample's rows for this customer with the filters it can
+    support (dates, type, minimum amount) applied by the ledger's date rule.
+    Returns None if a filter needs data the legacy format does not have.
+    """
+
+    if any(name in args for name in LEGACY_UNSUPPORTED_FILTERS):
+        return None
+    return ledger.select_transactions(
+        data_loader.find_transactions(args["customer_id"]), args.get("start_date"), args.get("end_date"),
+        transaction_type=args.get("transaction_type"), min_amount=args.get("min_amount"))
+
+
+def _legacy_unsupported():
+    return _dump({"status": "NOT_AVAILABLE",
+                  "message": "Category and account filters are not available in this dataset. "
+                             "Call again without them."})
+
+
+def _legacy_transactions(args):
+    customer_id = args["customer_id"]
+    filtered = any(k != "customer_id" for k in args)
+    rows = _legacy_rows(args)
+    if rows is None:
+        return _legacy_unsupported()
     if not rows:
+        if filtered:
+            return f"No transactions match these filters for customer {customer_id}."
         return f"No transactions found for customer {customer_id}."
     return json.dumps(rows, ensure_ascii=False)
 
@@ -276,7 +311,7 @@ def get_customer_transactions(customer_id: str, start_date: DateArg = None, end_
     if not data_loader.find_customer(customer_id):
         return _not_found(customer_id)
     if _is_legacy():
-        return _legacy_transactions(customer_id)
+        return _legacy_transactions(args)
 
     index = _index()
     period = _period(args)
@@ -332,9 +367,12 @@ def get_customer_transactions(customer_id: str, start_date: DateArg = None, end_
 
 # ---------- Metrics ----------
 
-def _legacy_metrics(customer_id):
-    transactions = data_loader.find_transactions(customer_id)
+def _legacy_metrics(args):
+    customer_id = args["customer_id"]
+    transactions = _legacy_rows(args)
     if not transactions:
+        if "start_date" in args or "end_date" in args:
+            return f"No transactions match these dates for customer {customer_id}."
         return f"No transactions found for customer {customer_id}."
     total_debit = total_credit = Decimal("0")
     for transaction in transactions:
@@ -368,7 +406,7 @@ def get_customer_metrics(customer_id: str, start_date: DateArg = None, end_date:
     customer_id = args["customer_id"]
 
     if _is_legacy():
-        return _legacy_metrics(customer_id)
+        return _legacy_metrics(args)
 
     index = _index()
     rows = index["transactions"].get(customer_id, [])

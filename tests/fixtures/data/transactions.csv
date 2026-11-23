@@ -1,0 +1,11 @@
+transaction_id,account_id,customer_id,card_id,transaction_date,transaction_type,amount,merchant,category,channel,related_transaction_id
+T001,ACC0101,C101,CRD0101,2026-11-01,Debit,2500,Amazon,Shopping,Card,
+T002,ACC0101,C101,,2026-11-02,Debit,1200,Swiggy,Dining,UPI,
+T003,ACC0101,C101,,2026-11-03,Credit,25000,Salary,Salary,Bank Transfer,
+T004,ACC0101,C101,CRD0101,2026-11-04,Debit,4500,Shopping,Shopping,Card,
+T005,ACC0101,C101,,2026-11-05,Debit,800,Uber,Transport,UPI,
+T006,ACC0102,C102,CRD0102,2026-11-01,Debit,1500,Amazon,Shopping,Card,
+T007,ACC0102,C102,,2026-11-02,Credit,30000,Salary,Salary,Bank Transfer,
+T008,ACC0103,C103,CRD0103,2026-11-03,Debit,3000,Travel,Travel,Card,
+T009,ACC0103,C103,,2026-11-04,Credit,40000,Salary,Salary,Bank Transfer,
+T010,ACC0103,C103,,2026-11-05,Debit,500,Food,Dining,UPI,

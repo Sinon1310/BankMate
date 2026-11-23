@@ -1,0 +1,29 @@
+{
+  "dataset": "bankmate-legacy-fixture",
+  "description": "The original BankMate sample data (C101-C103, T001-T010, unchanged values) in the Stage 1 schema, for backward-compatible tests. Fictional.",
+  "generator": null,
+  "generator_version": null,
+  "seed": null,
+  "window_start": "2026-11-01",
+  "as_of_date": "2026-11-05",
+  "currency": "INR",
+  "row_counts": {
+    "customers": 3,
+    "accounts": 3,
+    "cards": 3,
+    "transactions": 10,
+    "disputes": 0
+  },
+  "closing_balances": {
+    "ACC0101": "26000.00",
+    "ACC0102": "33500.00",
+    "ACC0103": "44500.00"
+  },
+  "sha256": {
+    "customers.csv": "48728d08f914be68218a74a305f3bb3480abac66a4dcb3ca4430538b9e6eef57",
+    "accounts.csv": "dd2e98480fc7a37bb10cf464f0cc8bbc1159e77be824f6bbfac3938816603bf9",
+    "cards.csv": "cdadb243835f6eda8988c1c4e10144893213a4a56ced15fb1d2ea98e586658e7",
+    "transactions.csv": "30398a0ca070316b9e15cd7c843d37907a6afd17f53545c35b766dd570584174",
+    "disputes.csv": "91e3115fa2b5b7710b0d5a0d27d893b452e4fdb2e8f44fa672795b54d42c578a"
+  }
+}

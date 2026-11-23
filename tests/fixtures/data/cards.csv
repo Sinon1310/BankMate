@@ -1,0 +1,4 @@
+card_id,account_id,network,card_last4,issued_on,expires_on,blocked_on,replaces_card_id,status
+CRD0101,ACC0101,Visa,1101,2024-01-10,2029-01,,,Active
+CRD0102,ACC0102,RuPay,1102,2023-05-02,2028-05,,,Active
+CRD0103,ACC0103,Mastercard,1103,2025-03-15,2030-03,,,Active

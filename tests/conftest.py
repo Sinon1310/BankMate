@@ -12,5 +12,9 @@ os.environ["BANKMATE_INDEX_AUTOINIT"] = "0"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# Tests use the legacy fixture (the original sample records in the v1
+# schema), not data/, so they do not change when data/ is regenerated.
+os.environ["BANKMATE_DATA_DIR"] = str(PROJECT_ROOT / "tests" / "fixtures" / "data")
+
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))

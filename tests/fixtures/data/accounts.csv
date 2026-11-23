@@ -1,0 +1,4 @@
+account_id,customer_id,account_type,opened_on,opening_balance_date,opening_balance
+ACC0101,C101,Savings,2019-04-12,2026-11-01,10000.00
+ACC0102,C102,Current,2018-02-20,2026-11-01,5000.00
+ACC0103,C103,Savings,2020-11-03,2026-11-01,8000.00

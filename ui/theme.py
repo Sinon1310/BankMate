@@ -11,35 +11,40 @@ import streamlit as st
 
 
 TOKENS = {
-    # Surfaces
-    "bg": "#F7F5F0",
-    "surface": "#FFFFFF",
-    "surface_subtle": "#F4F1EB",
-    "border": "#E3DED4",
-    "border_strong": "#D6D0C4",
-    # Text
-    "text": "#0B1B3A",
-    "text_muted": "#5B6478",
-    "text_faint": "#8A93A6",
-    # Accents
-    "primary": "#2E5BFF",
-    "primary_hover": "#2149E0",
-    "primary_soft": "#EAF0FF",
-    "violet": "#7C5CFF",
-    "violet_soft": "#F1EDFF",
-    # Semantic (always paired with a text label)
-    "credit": "#0F8A5F",
-    "credit_soft": "#E7F5EF",
-    "debit": "#C2410C",
-    "debit_soft": "#FCEEE6",
-    "danger": "#D92D20",
+    # Surfaces (dark navy / charcoal foundation)
+    "bg": "#0A101C",
+    "surface": "#111A2C",
+    "surface_subtle": "#0E1626",
+    "surface_raised": "#16213A",
+    "border": "#1F2B42",
+    "border_strong": "#2B3A56",
+    # Text (WCAG AA or better on surface)
+    "text": "#E7ECF5",
+    "text_muted": "#9AA6BC",
+    "text_faint": "#6E7B93",
+    # Accents (restrained blue)
+    "primary": "#5B8CFF",
+    "primary_hover": "#7AA2FF",
+    "primary_soft": "rgba(91, 140, 255, 0.14)",
+    "violet": "#A855F7",
+    "violet_soft": "rgba(168, 85, 247, 0.14)",
+    # Semantic, always paired with a text label. Chart order (blue, amber,
+    # teal, violet) validated for colour-blind separation on the dark surface.
+    "credit": "#0D9488",
+    "credit_soft": "rgba(13, 148, 136, 0.16)",
+    "debit": "#D97706",
+    "debit_soft": "rgba(217, 119, 6, 0.16)",
+    "danger": "#F87171",
+    "danger_soft": "rgba(248, 113, 113, 0.12)",
+    "warning": "#FBBF24",
+    "success": "#34D399",
     # Shape & depth
     "radius_sm": "8px",
     "radius": "12px",
     "radius_lg": "16px",
-    "shadow_sm": "0 1px 2px rgba(11, 27, 58, 0.04)",
-    "shadow": "0 1px 2px rgba(11, 27, 58, 0.04), 0 6px 20px -8px rgba(11, 27, 58, 0.10)",
-    "shadow_lg": "0 2px 4px rgba(11, 27, 58, 0.04), 0 16px 40px -16px rgba(11, 27, 58, 0.18)",
+    "shadow_sm": "0 1px 2px rgba(0, 0, 0, 0.35)",
+    "shadow": "0 1px 2px rgba(0, 0, 0, 0.30), 0 8px 24px -12px rgba(0, 0, 0, 0.55)",
+    "shadow_lg": "0 2px 4px rgba(0, 0, 0, 0.30), 0 18px 40px -18px rgba(0, 0, 0, 0.65)",
 }
 
 MOBILE_BREAKPOINT = "768px"
@@ -65,8 +70,8 @@ __VARIABLES__
 
 [data-testid="stMainBlockContainer"],
 .block-container {
-  max-width: 1120px;
-  padding-top: 2.75rem;
+  max-width: 1280px;
+  padding-top: 2rem;
   padding-bottom: 4rem;
 }
 
@@ -535,20 +540,20 @@ __VARIABLES__
 }
 
 [class*="st-key-bm-msg-error"] [data-testid="stChatMessage"] > :first-child {
-  background: #FDECEA;
+  background: var(--bm-danger-soft);
   color: var(--bm-danger);
 }
 
 [class*="st-key-bm-msg-error"] [data-testid="stChatMessageContent"] {
   padding: 0.625rem 0.875rem;
-  border: 1px solid #F6CFCB;
+  border: 1px solid rgba(248, 113, 113, 0.35);
   border-radius: var(--bm-radius);
-  background: #FFF8F7;
+  background: var(--bm-danger-soft);
 }
 
 [class*="st-key-bm-msg-error"] [data-testid="stChatMessageContent"] p {
   margin: 0;
-  color: #8A1F17;
+  color: var(--bm-danger);
 }
 
 [class*="st-key-bm-msg-assistant"] [data-testid="stChatMessageContent"] {
@@ -677,7 +682,7 @@ __VARIABLES__
 }
 
 .bm-icon-tile.bm-tile-danger {
-  background: #FDECEA;
+  background: var(--bm-danger-soft);
   color: var(--bm-danger);
 }
 
@@ -806,7 +811,7 @@ __VARIABLES__
 
 .bm-kpis {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 1px;
   border: 1px solid var(--bm-border);
   border-radius: var(--bm-radius-lg);
@@ -896,6 +901,7 @@ __VARIABLES__
 /* ---------- Transactions table ---------- */
 
 .bm-table-wrap {
+  margin-bottom: 1rem;      /* offsets Streamlit's negative markdown margin: space before captions/panel edges */
   overflow-x: auto;
   border: 1px solid var(--bm-border);
   border-radius: var(--bm-radius-lg);
@@ -950,7 +956,7 @@ __VARIABLES__
 }
 
 .bm-table tbody tr:hover td {
-  background: #FBFAF7;
+  background: var(--bm-surface-raised);
 }
 
 .bm-table .bm-right { text-align: right; }
@@ -1048,8 +1054,9 @@ __VARIABLES__
   width: 3.25rem;
   height: 3.25rem;
   border-radius: 14px;
-  background: var(--bm-text);
-  color: #FFFFFF;
+  background: var(--bm-primary-soft);
+  color: var(--bm-primary-hover);
+  border: 1px solid rgba(91, 140, 255, 0.35);
   font-family: "Inter Tight", Inter, sans-serif;
   font-size: 1.125rem;
   font-weight: 700;
@@ -1528,7 +1535,7 @@ __VARIABLES__
   }
 
   /* Secondary columns (IDs) drop on phones; the date, merchant, type
-     and amount stay, and IDs remain on the Customer Explorer. */
+     and amount stay, and IDs remain on Customer 360. */
   .bm-table .bm-col-secondary {
     display: none;
   }
@@ -1558,6 +1565,318 @@ __VARIABLES__
   .st-key-bm-composer {
     margin-top: 1.5rem;
   }
+}
+
+/* ---------- Stage UI: dark product polish and new components ---------- */
+
+[data-testid="stApp"] {
+  background:
+    radial-gradient(1200px 500px at 85% -10%, rgba(91, 140, 255, 0.07), transparent 60%),
+    var(--bm-bg);
+}
+
+[data-testid="stSidebar"] {
+  border-right: 1px solid var(--bm-border);
+}
+
+[data-testid="stSidebarNav"] a {
+  border-radius: var(--bm-radius-sm);
+}
+
+[data-testid="stSidebarNav"] a[aria-current="page"] {
+  background: var(--bm-primary-soft);
+}
+
+[data-testid="stSidebarNav"] a[aria-current="page"] span {
+  color: var(--bm-text) !important;
+  font-weight: 600;
+}
+
+[data-testid="stSidebarNavSeparator"] + div span,
+[data-testid="stNavSectionHeader"] {
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-size: 0.6875rem !important;
+  color: var(--bm-text-faint) !important;
+}
+
+.bm-page-title {
+  font-size: 1.625rem !important;
+  letter-spacing: -0.015em;
+}
+
+.bm-page-subtitle {
+  color: var(--bm-text-muted) !important;
+}
+
+[class*="st-key-bm-panel"] {
+  background: var(--bm-surface) !important;
+  border: 1px solid var(--bm-border) !important;
+  border-radius: var(--bm-radius-lg) !important;
+  padding: 1.125rem 1.25rem 1rem !important;
+  box-shadow: var(--bm-shadow-sm);
+}
+
+.bm-kpis {
+  margin-bottom: 0.875rem;
+}
+
+.bm-kpi {
+  background: var(--bm-surface) !important;
+  border: 1px solid var(--bm-border) !important;
+}
+
+.bm-kpi-value {
+  letter-spacing: -0.01em;
+}
+
+.bm-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 1.25rem 0 0.625rem;
+}
+
+.bm-section-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+  color: var(--bm-text);
+}
+
+.bm-section-sub {
+  font-size: 0.8125rem;
+  color: var(--bm-text-faint);
+}
+
+/* Status badges: text label plus tone (never colour alone) */
+.bm-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.bm-badge-success { color: #6EE7B7; background: rgba(52, 211, 153, 0.12); border-color: rgba(52, 211, 153, 0.25); }
+.bm-badge-warning { color: #FCD34D; background: rgba(251, 191, 36, 0.12); border-color: rgba(251, 191, 36, 0.25); }
+.bm-badge-info { color: #93B4FF; background: var(--bm-primary-soft); border-color: rgba(91, 140, 255, 0.3); }
+.bm-badge-danger { color: #FCA5A5; background: var(--bm-danger-soft); border-color: rgba(248, 113, 113, 0.3); }
+.bm-badge-neutral { color: var(--bm-text-muted); background: rgba(154, 166, 188, 0.10); border-color: var(--bm-border-strong); }
+
+.bm-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.bm-status-cell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 0.75rem;
+  background: var(--bm-surface-subtle);
+  border: 1px solid var(--bm-border);
+  border-radius: var(--bm-radius);
+}
+
+.bm-status-count {
+  font-family: "Inter Tight", Inter, sans-serif;
+  font-weight: 700;
+  font-size: 1.25rem;
+  color: var(--bm-text);
+}
+
+.bm-mini-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.bm-mini-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.625rem 0;
+  border-bottom: 1px solid var(--bm-border);
+  font-size: 0.875rem;
+  color: var(--bm-text);
+  line-height: 1.45;
+}
+
+.bm-mini-row:last-child { border-bottom: none; }
+.bm-mini-row .bm-icon { font-size: 18px; vertical-align: -4px; color: var(--bm-text-muted); }
+
+.bm-mini-legend {
+  font-size: 0.75rem;
+  color: var(--bm-text-faint);
+  line-height: 1.6;
+}
+
+.bm-muted { color: var(--bm-text-muted); }
+
+/* Account cards */
+.bm-account-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.bm-account {
+  padding: 0.875rem 1rem;
+  border-radius: var(--bm-radius);
+  background: linear-gradient(160deg, var(--bm-surface-raised), var(--bm-surface-subtle));
+  border: 1px solid var(--bm-border-strong);
+}
+
+.bm-account-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.bm-account-type {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--bm-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bm-account-balance {
+  margin: 0.5rem 0 0.375rem;
+  font-family: "Inter Tight", Inter, sans-serif;
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: var(--bm-text);
+}
+
+.bm-account-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--bm-text-faint);
+}
+
+.bm-caption {
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--bm-text-faint);
+}
+
+/* Tables: denser rows so wide ledgers fit the panel */
+.bm-table-wide td,
+.bm-table-wide th {
+  padding: 0.5rem 0.625rem !important;
+  font-size: 0.8125rem;
+}
+
+.bm-table-wide .bm-col-secondary { font-size: 0.6875rem; }
+
+.bm-table-compact td,
+.bm-table-compact th {
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
+}
+
+.bm-table th {
+  background: var(--bm-surface-raised) !important;
+  color: var(--bm-text-muted) !important;
+}
+
+/* Pager */
+[class*="st-key-bm-pager-"] {
+  justify-content: flex-end;
+  gap: 0.25rem !important;
+  margin: 0.25rem 0 0.5rem;
+}
+
+.bm-pager-text {
+  margin-right: auto;
+  font-size: 0.8125rem;
+  color: var(--bm-text-muted);
+}
+
+.bm-pager-text strong { color: var(--bm-text); font-weight: 600; }
+
+/* Definition list */
+.bm-dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.75rem; margin: 0; }
+.bm-dl dt { font-size: 0.75rem; color: var(--bm-text-faint); }
+.bm-dl dd { margin: 0.125rem 0 0; color: var(--bm-text); font-weight: 500; }
+
+/* Inputs on dark surfaces */
+[data-baseweb="input"] > div,
+[data-baseweb="select"] > div,
+[data-testid="stDateInputField"] {
+  background: var(--bm-surface-subtle) !important;
+}
+
+/* Chat */
+[data-testid="stChatMessage"] {
+  background: transparent;
+}
+
+[data-testid="stChatMessage"] table {
+  font-size: 0.875rem;
+}
+
+/* Customer 360: compact selector on narrow screens only (hide its wrapper too,
+   so it leaves no gap on desktop) */
+.st-key-bm-customer-picker-compact,
+[data-testid="stLayoutWrapper"]:has(> .st-key-bm-customer-picker-compact) { display: none; }
+
+/* Header stays readable over scrolled content (e.g. the chat, which scrolls to the bottom) */
+[data-testid="stHeader"] {
+  background: rgba(10, 16, 28, 0.88) !important;
+  backdrop-filter: blur(8px);
+}
+
+/* Wide tables scroll inside their panel; the hint shows only on narrow screens */
+.bm-scroll-hint { display: none; }
+
+/* Amounts and masked card references never break across lines; a wide
+   table scrolls sideways instead (see .bm-table-wrap). */
+.bm-nowrap,
+.bm-table td.bm-right { white-space: nowrap; }
+
+/* Phone-only duplicates (e.g. dispute status and amount under the ID) */
+.bm-mobile-only { display: none; }
+.bm-dispute-glance { margin-top: 0.25rem; flex-wrap: wrap; align-items: center; gap: 0.375rem; }
+
+@media (max-width: __BREAKPOINT__) {
+  .st-key-bm-customer-picker-compact,
+  [data-testid="stLayoutWrapper"]:has(> .st-key-bm-customer-picker-compact) { display: block; }
+  .bm-kpi:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .bm-scroll-hint { display: block; margin: 0.5rem 0 0; font-size: 0.75rem; color: var(--bm-text-faint); }
+  .bm-mobile-only { display: block; }
+  .bm-table-wrap + .bm-scroll-hint { margin-top: -0.5rem; }
+  /* Sticky tables keep their label column (month, category, account, dispute) in view while swiping */
+  .bm-table-sticky th:first-child,
+  .bm-table-sticky td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    background: var(--bm-surface);
+    box-shadow: 1px 0 0 var(--bm-border);
+  }
+  .bm-table-sticky th:first-child { background: var(--bm-surface-raised) !important; }
+  .bm-dispute-glance { display: flex; }
+  .st-key-bm-panel-customer-list { display: none !important; }
+  [data-testid="stColumn"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stLayoutWrapper"] > .st-key-bm-panel-customer-list),
+  [data-testid="stColumn"]:has(.st-key-bm-panel-customer-list) { display: none !important; }
+  .bm-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bm-kpi { padding: 0.75rem 0.875rem; }
+  .bm-kpi-value { font-size: 1.0625rem !important; white-space: nowrap; }
+  .bm-status-grid { grid-template-columns: 1fr; }
+  .bm-account-grid { grid-template-columns: 1fr; }
 }
 
 /* ---------- Chrome cleanup ---------- */

@@ -109,16 +109,21 @@ def active(at):
 
 # ---------- Home (Stage 1) ----------
 
-def test_home_renders_brand_and_live_workspace_stats():
+def test_home_renders_overview_with_live_dataset_figures():
     at = run_app()
     text = page_text(at)
 
-    assert "Banking answers" in text
-    # Values come from data/*.csv and knowledge/policies, not hardcoded.
-    assert '>3</div><div class="bm-stat-label">Customers' in text
-    assert '>10</div><div class="bm-stat-label">Transactions' in text
-    assert '>3</div><div class="bm-stat-label">Policy documents' in text
-    assert "1–5 Nov 2026" in text
+    assert "Customer intelligence overview" in text
+    # Values come from the loaded dataset via app.ledger, not hardcoded
+    # (test fixture: 3 customers, 3 accounts, 3 cards, 10 transactions).
+    for label, value in (("Customers", "3"), ("Accounts", "3"), ("Debit cards", "3"),
+                         ("Transactions", "10"), ("Disputes", "0")):
+        assert f'{label}</div><div class="bm-kpi-value">{value}</div>' in text, label
+    assert "₹1,04,000" in text                      # closing balances 26,000 + 33,500 + 44,500
+    assert "₹95,000" in text and "₹14,000" in text and "+₹81,000" in text
+    assert "not a balance" in text
+    assert "1 Nov 2026 – 5 Nov 2026" in text
+    assert len(at.get("arrow_vega_lite_chart")) == 2
 
 
 def test_only_implemented_pages_are_registered():
@@ -129,7 +134,9 @@ def test_only_implemented_pages_are_registered():
         "ui/views/home.py",
         "ui/views/assistant.py",
         "ui/views/customers.py",
+        "ui/views/transactions.py",
         "ui/views/analytics.py",
+        "ui/views/disputes.py",
         "ui/views/policies.py",
     ]
     for path in paths:
@@ -138,8 +145,9 @@ def test_only_implemented_pages_are_registered():
 
 def test_every_home_button_has_a_real_action():
     at = run_app()
-    # 4 suggestion chips + 3 capability actions; nothing decorative.
-    assert len(at.main.button) == 7
+    # Only the 4 suggestion chips are buttons; shortcuts are page links.
+    assert sorted(b.key for b in at.main.button) == [
+        "chip-btn-balances", "chip-btn-dispute", "chip-btn-monthly", "chip-btn-refund"]
 
 
 def test_suggestion_chip_opens_assistant_and_sends_prompt(backend):
@@ -151,11 +159,12 @@ def test_suggestion_chip_opens_assistant_and_sends_prompt(backend):
     assert "Answer to: How are refunds handled" in page_text(at)
 
 
-def test_capability_card_opens_assistant_with_its_prompt(backend):
+def test_customer_chip_names_the_customer_it_asks_about(backend):
     at = run_app()
-    at.button(key="card-btn-metrics").click().run()
+    at.button(key="chip-btn-balances").click().run()
 
-    assert backend.questions() == ["What are C101's transaction metrics?"]
+    # The ID is in the question, so the assistant may look the customer up.
+    assert backend.questions() == ["Show C101's account balances"]
 
 
 def test_home_composer_sends_typed_question(backend):
@@ -171,11 +180,11 @@ def test_home_composer_sends_typed_question(backend):
 def test_empty_state_offers_working_suggestions(backend):
     at = open_assistant()
 
-    assert "How can I help?" in page_text(at)
+    assert "Your banking intelligence assistant" in page_text(at)
     at.button(key="chip-btn-empty-refund").click().run()
 
     assert backend.questions() == ["What happens when a refund is approved?"]
-    assert "How can I help?" not in page_text(at)
+    assert "Your banking intelligence assistant" not in page_text(at)
 
 
 def test_follow_ups_share_one_session(backend):
@@ -396,70 +405,35 @@ def test_explorer_works_without_assistant_backend(monkeypatch):
     assert "Arjun Mehta" in page_text(at)
 
 
-# ---------- Transaction Analytics (Stage 3) ----------
-
-def open_analytics():
-    """
-    Open Analytics and normalise the Type segmented control.
-
-    Workaround for Streamlit 1.50 AppTest: an untouched single-select
-    segmented control keeps its default as a plain string, which AppTest
-    iterates character by character on the next rerun. Setting it as a
-    one-item list (as AppTest expects) avoids that; it must be done again
-    before each rerun. App code is unaffected.
-    """
-
-    at = open_page(ANALYTICS)
-    set_type(at, "All", run=False)
-    return at
-
-
-def set_type(at, value, run=True):
-    control = next(g for g in at.get("button_group") if g.key == "analytics-type")
-    control.set_value([value])
-    return control.run() if run else at
+# ---------- Analytics (UI sprint) ----------
 
 def test_analytics_defaults_cover_all_transactions():
     at = open_page(ANALYTICS)
     text = page_text(at)
 
     assert "₹14,000" in text and "₹95,000" in text and "+₹81,000" in text
-    assert "not an account balance" in text
-    assert len(at.get("arrow_vega_lite_chart")) == 3
-    assert text.count("<tr>") == 1 + 10
-
-
-def test_analytics_type_filter_scopes_kpis_charts_and_table():
-    at = open_analytics()
-    set_type(at, "Credit")
-    text = page_text(at)
-
-    assert not at.exception, at.exception
-    assert "₹0" in text and "₹95,000" in text
-    assert "No debits" in text  # merchant chart empty state
-    assert len(at.get("arrow_vega_lite_chart")) == 2
-    assert text.count("<tr>") == 1 + 3
+    assert "not a balance" in text and "Spending (net)" in text and "Transfers out" in text
+    assert len(at.get("arrow_vega_lite_chart")) == 3          # monthly flow, balance trend, categories
+    assert "Showing <strong>1–10</strong> of <strong>10</strong>" in text
 
 
 def test_analytics_customer_filter():
-    at = open_analytics()
+    at = open_page(ANALYTICS)
     at.multiselect(key="analytics-customers").set_value(["C101"]).run()
     text = page_text(at)
 
+    assert not at.exception, at.exception
     assert "₹9,000" in text and "₹25,000" in text and "+₹16,000" in text
-    assert text.count("<tr>") == 1 + 5
+    assert "of <strong>5</strong>" in text
 
 
 def test_analytics_empty_selection_shows_empty_state():
-    at = open_analytics()
-    at.multiselect(key="analytics-customers").set_value(["C102"]).run()
-    # Set the date, then the type (which reruns) — AppTest needs the
-    # segmented control re-normalised before every rerun.
-    at.date_input(key="analytics-dates").set_value((date(2026, 11, 4), date(2026, 11, 5)))
-    set_type(at, "Credit")
+    at = open_page(ANALYTICS)
+    at.multiselect(key="analytics-customers").set_value(["C102"])
+    at.date_input(key="analytics-dates").set_value((date(2026, 11, 4), date(2026, 11, 5))).run()
 
     assert not at.exception, at.exception
-    assert "No transactions match these filters" in page_text(at)
+    assert "No transactions in this selection" in page_text(at)
     assert not at.get("arrow_vega_lite_chart")
 
 
@@ -772,7 +746,7 @@ def test_expired_memory_fresh_start_opens_new_conversation(backend):
     at.button(key="assistant-fresh-start").click().run()
 
     assert active(at)["id"] != old_id
-    assert "How can I help?" in page_text(at)
+    assert "Your banking intelligence assistant" in page_text(at)
 
 
 def test_unanswered_question_is_not_silently_resent_after_expiry(backend):
@@ -826,7 +800,8 @@ def test_failed_index_banner_on_policy_pages_only(failed_index):
     assert any("policy index isn't available" in e for e in error_texts(policies_page))
     assert "Card Dispute Handling Policy" in page_text(policies_page)    # library still works
 
-    for path in (navigation.HOME["path"], CUSTOMERS, ANALYTICS):
+    for path in (navigation.HOME["path"], CUSTOMERS, ANALYTICS,
+                 navigation.TRANSACTIONS["path"], navigation.DISPUTES["path"]):
         page = open_page(path)
         assert not error_texts(page), path
 
@@ -859,7 +834,7 @@ def test_startup_initialisation_failure_is_recorded_not_raised(monkeypatch):
 
     try:
         at = run_app()                        # app starts despite the failure
-        assert "Banking answers" in page_text(at)
+        assert "Customer intelligence overview" in page_text(at)
         assert index_status._status["ok"] is False
         assert index_status._status["error"] == "cannot build"
     finally:

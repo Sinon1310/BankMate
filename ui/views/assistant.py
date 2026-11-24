@@ -30,10 +30,15 @@ ERROR_MESSAGE = (
     "try again in a moment."
 )
 
+# Each suggestion names a customer ID: the assistant only looks up
+# customers the user mentions (see app/security.py).
 EMPTY_STATE_PROMPTS = [
-    ("profile", "Show me the profile of customer C101."),
-    ("metrics", "What are C103's transaction metrics?"),
-    ("unauthorized", "What should a customer do about an unauthorized transaction?"),
+    ("balances", "Show C101's account balances."),
+    ("credits", "What were C102's credits and debits in October 2026?"),
+    ("largest", "Show C113's largest transactions."),
+    ("spending", "Analyse C104's monthly spending."),
+    ("dispute", "What is the status of C111's dispute?"),
+    ("merchant", "Find C106's HomeNest transactions."),
     ("refund", "What happens when a refund is approved?"),
 ]
 
@@ -196,10 +201,12 @@ with st.container(key="bm-thread"):
         ui.html(
             '<div class="bm-chat-empty">'
             f'<span class="bm-icon-tile violet bm-chat-empty-icon">{ui.icon("auto_awesome")}</span>'
-            '<h2 class="bm-chat-empty-title">How can I help?</h2>'
-            '<p class="bm-chat-empty-body">Ask about a customer, their '
-            "transactions or a bank procedure. Policy answers list the "
-            "fictional training documents they rely on.</p></div>"
+            '<h2 class="bm-chat-empty-title">Your banking intelligence assistant</h2>'
+            '<p class="bm-chat-empty-body">Ask about a customer\'s accounts, balances, '
+            "transactions, spending or disputes, or about a bank procedure. Name "
+            "customers by ID (for example C101): BankMate only looks up customers "
+            "you mention. Policy answers cite the fictional training documents "
+            "they rely on.</p></div>"
         )
 
         with st.container(horizontal=True, gap="small", key="bm-chiprow-empty"):

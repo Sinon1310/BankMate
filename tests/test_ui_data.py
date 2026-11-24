@@ -26,7 +26,7 @@ from ui import data
     (100000, "₹1,00,000"),
     (12345678, "₹1,23,45,678"),
     (Decimal("1234.50"), "₹1,234.50"),
-    (-4500, "-₹4,500"),
+    (-4500, "\u2212₹4,500"),            # Unicode minus, not a hyphen
 ])
 def test_format_inr_uses_indian_grouping(value, expected):
     assert data.format_inr(value) == expected
@@ -35,7 +35,7 @@ def test_format_inr_uses_indian_grouping(value, expected):
 def test_format_inr_signed():
     assert data.format_inr(16000, signed=True) == "+₹16,000"
     assert data.format_inr(0, signed=True) == "₹0"
-    assert data.format_inr(-300, signed=True) == "-₹300"
+    assert data.format_inr(-300, signed=True) == "\u2212₹300"
 
 
 def test_format_day_and_initials():

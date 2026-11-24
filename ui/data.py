@@ -1,5 +1,5 @@
 """
-Read-only data views for the Customer Explorer and Transaction Analytics.
+Read-only data views and formatting (format_inr, format_day) shared by the pages.
 
 Everything here reuses the backend's data access:
 - records come from app.data_loader (customers, transactions,
@@ -19,12 +19,14 @@ import json
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from app.data_loader import customers, find_customer, find_transactions, transactions
+from app import data_loader
+from app.data_loader import customers, find_customer, find_transactions, transactions  # noqa: F401
 from app.tools import get_customer_metrics
 
 
 DEBIT = "Debit"
 CREDIT = "Credit"
+MINUS = "\u2212"          # "−", never the hyphen-minus, for negative amounts
 
 
 # ---------- Formatting ----------
@@ -32,11 +34,13 @@ CREDIT = "Credit"
 def format_inr(value, signed=False):
     """
     Format an amount in rupees with Indian digit grouping
-    (1,00,000), dropping paise when they are zero.
+    (1,00,000), dropping paise when they are zero. Negative amounts use
+    the Unicode minus sign (U+2212), the same as the transaction tables
+    and chart axes.
     """
 
     amount = Decimal(str(value))
-    sign = "-" if amount < 0 else ("+" if signed and amount > 0 else "")
+    sign = MINUS if amount < 0 else ("+" if signed and amount > 0 else "")
     amount = abs(amount)
 
     whole = int(amount)
@@ -76,19 +80,22 @@ def initials(name):
 # ---------- Customers ----------
 
 def all_customers():
-    return list(customers)
+    # Read from the loaded dataset each time (not a list bound at import),
+    # so the list always matches what the tools read.
+    return list(data_loader.get_dataset().customers)
 
 
 def search_customers(query):
     """Case-insensitive match on ID, name, city or account type."""
 
     needle = (query or "").strip().lower()
+    everyone = all_customers()
 
     if not needle:
-        return list(customers)
+        return everyone
 
     return [
-        customer for customer in customers
+        customer for customer in everyone
         if any(
             needle in (customer.get(field) or "").lower()
             for field in ("customer_id", "customer_name", "city", "account_type")

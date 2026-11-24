@@ -271,6 +271,7 @@ def render_library():
         "Policy Intelligence",
         "Browse the fictional BankMate training policies, read them section "
         "by section, and search the same index the assistant cites from.",
+        kicker="Knowledge",
     )
 
     if load_error is not None:

@@ -1,122 +1,133 @@
 """
-Home: brand introduction, conversational entry point, suggested prompts
-and a compact overview of what the assistant can do today.
+Overview: portfolio KPIs, monthly activity, segment mix, recent activity,
+dispute overview and a conversational entry point to the assistant.
 
-Every control here leads somewhere real: prompts and cards open the AI
-Assistant and send the selected question.
+Every figure is computed from the loaded dataset by app.ledger (through
+ui.insights). Every control leads somewhere real: chips and the composer
+open the AI Assistant and send the question; shortcuts open pages.
 """
-
-from datetime import date
 
 import streamlit as st
 
-from app.data_loader import customers, transactions
-from app.document_loader import POLICY_DIR
 from app.security import MAX_QUESTION_CHARS
+from ui import charts, insights, navigation
 from ui import components as ui
+from ui.data import format_day, format_inr
 
-
+# Customer IDs are typed into each prompt: the assistant only looks up
+# customers the user names (see app/security.py).
 SUGGESTED_PROMPTS = [
-    ("history", "Show C102's transaction history"),
-    ("compare", "Compare total debits for C101 and C103"),
+    ("balances", "Show C101's account balances"),
+    ("monthly", "Analyse C104's monthly spending"),
     ("refund", "How are refunds handled for duplicate transactions?"),
-    ("dispute", "What information is needed to raise a card dispute?"),
-]
-
-CAPABILITIES = [
-    {
-        "key": "customers",
-        "glyph": "person_search",
-        "tone": "",
-        "title": "Customer lookup",
-        "body": (
-            "Retrieve customer profiles by ID and keep context across "
-            "follow-up questions in the same conversation."
-        ),
-        "action": "Show C101's profile",
-        "prompt": "Show me the profile of customer C101.",
-    },
-    {
-        "key": "metrics",
-        "glyph": "monitoring",
-        "tone": "credit",
-        "title": "Transaction metrics",
-        "body": (
-            "Debit, credit and net transaction flow calculated in Python "
-            "from the transaction records, never estimated by the model."
-        ),
-        "action": "Get C101's metrics",
-        "prompt": "What are C101's transaction metrics?",
-    },
-    {
-        "key": "policies",
-        "glyph": "policy",
-        "tone": "violet",
-        "title": "Policy answers",
-        "body": (
-            "Procedures from the fictional training policies, with "
-            "citations validated against the documents actually retrieved."
-        ),
-        "action": "Ask about fraud reporting",
-        "prompt": "What should a customer do about an unauthorized transaction?",
-    },
+    ("dispute", "What is the status of C111's dispute?"),
 ]
 
 
-def _activity_period():
-    dates = sorted(
-        date.fromisoformat(row["transaction_date"])
-        for row in transactions
-        if row.get("transaction_date")
-    )
-
-    if not dates:
-        return "—"
-
-    first, last = dates[0], dates[-1]
-
-    # Day numbers are formatted manually: "%-d" is not portable.
-    if first == last:
-        return f"{first.day} {first.strftime('%b %Y')}"
-
-    if (first.year, first.month) == (last.year, last.month):
-        return f"{first.day}–{last.day} {last.strftime('%b %Y')}"
-
-    return (
-        f"{first.day} {first.strftime('%b')} – "
-        f"{last.day} {last.strftime('%b %Y')}"
-    )
+def _period_text():
+    start, end = insights.window()
+    return f"{format_day(start)} – {format_day(end)}"
 
 
-# ---------- Hero ----------
-
-ui.eyebrow("AI banking copilot")
-
-ui.html(
-    '<h1 class="bm-display">Banking answers,<br>'
-    "<em>grounded in your data.</em></h1>"
-    '<p class="bm-lede">Ask BankMate about customers, transaction activity '
-    "or bank procedures. It retrieves records with live tool calls and cites "
-    "the policy documents behind every policy answer.</p>"
+ui.page_header(
+    "Customer intelligence overview",
+    f"Synthetic portfolio activity, {_period_text()}. Balances are as of {format_day(insights.as_of())}.",
+    kicker="Overview",
 )
 
-# ---------- Conversational entry point ----------
+if not insights.available():
+    ui.empty_state("database", "Expanded dataset required",
+                   "This view needs the v1 dataset with accounts, cards and disputes.")
+    st.stop()
 
-with st.container(key="bm-composer"):
-    typed = st.chat_input(
-        "Ask about a customer, a transaction or a policy…",
-        key="home-composer-input",
-        max_chars=MAX_QUESTION_CHARS,
-    )
+data = insights.overview()
+f = data["figures"]
 
-    ui.html('<div class="bm-composer-hint">Try asking</div>')
+# ---------- Portfolio KPIs ----------
 
-    with st.container(horizontal=True, gap="small", key="bm-chiprow"):
-        chosen = None
+ui.kpi_tiles([
+    {"label": "Customers", "value": f"{data['customers']:,}", "note": f"{len(insights.segment_summary())} segments"},
+    {"label": "Accounts", "value": f"{data['accounts']:,}", "note": "Savings and current"},
+    {"label": "Debit cards", "value": f"{data['cards']:,}", "note": f"{data['active_cards']} active"},
+    {"label": "Transactions", "value": f"{data['transactions']:,}", "note": "Posted in the period"},
+    {"label": "Disputes", "value": f"{data['disputes']:,}", "note": f"{data['open_disputes']} open or under investigation"},
+])
 
-        for key, prompt in SUGGESTED_PROMPTS:
-            if ui.prompt_chip(prompt, key):
-                chosen = prompt
+ui.kpi_tiles([
+    {"label": "Total balance", "value": format_inr(data["total_balance"]),
+     "note": f"All accounts, as of {format_day(insights.as_of())}", "swatch": "primary"},
+    {"label": "Credits", "value": format_inr(f["total_credits"]), "note": "Includes refunds once",
+     "swatch": "credit"},
+    {"label": "Debits", "value": format_inr(f["total_debits"]), "note": "Includes transfers out", "swatch": "debit"},
+    {"label": "Net transaction flow", "value": format_inr(f["net_cash_flow"], signed=True),
+     "note": "Credits minus debits; not a balance"},
+])
+
+# ---------- Activity and segments ----------
+
+left, right = st.columns([3, 2], gap="medium")
+
+with left:
+    with st.container(key="bm-panel-monthly"):
+        ui.panel_heading("Monthly credits and debits", "Posted transactions per calendar month (November to date)")
+        months = insights.monthly()
+        if months:
+            st.altair_chart(charts.monthly_flow(months), use_container_width=True, theme=None)
+        else:
+            ui.empty_state("bar_chart", "No activity", "There are no transactions in the dataset.")
+
+with right:
+    with st.container(key="bm-panel-segments"):
+        ui.panel_heading("Balance by segment", f"Total account balances as of {format_day(insights.as_of())}")
+        segments = insights.segment_summary()
+        st.altair_chart(charts.ranked_bars([(f"{s} ({c})", bal, "Balance") for s, c, _a, bal in segments],
+                                           height_per_row=40), use_container_width=True, theme=None)
+        ui.html('<div class="bm-mini-legend">Segment (number of customers). Exact amounts on hover.</div>')
+
+# ---------- Recent activity and disputes ----------
+
+left, right = st.columns([3, 2], gap="medium")
+
+with left:
+    with st.container(key="bm-panel-recent"):
+        ui.panel_heading("Recent transactions", "The latest posted activity across all customers")
+        recent = insights.transactions_page(limit=6)
+        names = {cid: name for cid, name, _seg in insights.customer_options()}
+        ui.ledger_table(recent["rows"], customer_names=names, card_last4=insights.card_last4, compact=True)
+        st.page_link(navigation.TRANSACTIONS["path"], label="Open the transaction explorer",
+                     icon=":material/arrow_forward:")
+
+with right:
+    with st.container(key="bm-panel-disputes"):
+        ui.panel_heading("Disputes", "Card disputes by status (policy POL-001 statuses)")
+        counts = insights.dispute_counts()
+        ui.html('<div class="bm-status-grid">' + "".join(
+            f'<div class="bm-status-cell"><div class="bm-status-count">{n}</div>{ui.badge(status)}</div>'
+            for status, n in counts.items()) + "</div>")
+        open_cases = [d for d in insights.disputes() if d["status"] in insights.OPEN_STATUSES][:3]
+        if open_cases:
+            ui.html('<div class="bm-mini-list">' + "".join(
+                f'<div class="bm-mini-row"><span><strong>{d["dispute_id"]}</strong> · {d["customer_name"]} '
+                f'<span class="bm-muted">{d["customer_id"]}</span><br><span class="bm-muted">{d["reason"]} · '
+                f'{d["merchant"]}</span></span><span class="bm-num">{format_inr(d["amount"])}</span></div>'
+                for d in open_cases) + "</div>")
+        st.page_link(navigation.DISPUTES["path"], label="Review all disputes", icon=":material/arrow_forward:")
+
+# ---------- Ask BankMate ----------
+
+with st.container(key="bm-panel-ask"):
+    ui.panel_heading("Ask BankMate", "Questions about a customer (by ID), transactions or bank procedures")
+    with st.container(key="bm-composer"):
+        typed = st.chat_input(
+            "Ask about a customer, a transaction or a policy…",
+            key="home-composer-input",
+            max_chars=MAX_QUESTION_CHARS,
+        )
+        with st.container(horizontal=True, gap="small", key="bm-chiprow"):
+            chosen = None
+            for key, prompt in SUGGESTED_PROMPTS:
+                if ui.prompt_chip(prompt, key):
+                    chosen = prompt
 
 if typed:
     ui.go_to_assistant(typed)
@@ -124,38 +135,7 @@ if typed:
 if chosen:
     ui.go_to_assistant(chosen)
 
-# ---------- Capabilities ----------
-
-ui.section_label("What BankMate can do")
-
-columns = st.columns(len(CAPABILITIES), gap="medium")
-
-for column, capability in zip(columns, CAPABILITIES):
-    with column:
-        clicked = ui.capability_card(
-            capability["key"],
-            capability["glyph"],
-            capability["title"],
-            capability["body"],
-            capability["action"],
-            tone=capability["tone"],
-        )
-
-        if clicked:
-            ui.go_to_assistant(capability["prompt"])
-
-# ---------- Workspace snapshot (live from the data files) ----------
-
-ui.section_label("Workspace")
-
-ui.stat_strip([
-    (len(customers), "Customers"),
-    (len(transactions), "Transactions"),
-    (len(list(POLICY_DIR.glob("*.txt"))), "Policy documents"),
-    (_activity_period(), "Activity period"),
-])
-
 ui.footnote(
-    "Demonstration workspace: customer and transaction records are synthetic, "
-    "and policy documents are fictional training material."
+    "Demonstration workspace: all customers, accounts, cards and transactions are synthetic, "
+    "and policy documents are fictional training material. No real bank is represented."
 )

@@ -678,7 +678,8 @@ def test_rate_limit_shows_friendly_message_and_retry(monkeypatch):
     send(at, "Hello")
     text = page_text(at)
 
-    assert "try again in about 13 seconds" in text
+    assert "reached its usage limit" in text and "wait a minute, then try again" in text
+    assert "13 seconds" not in text and "1 seconds" not in text
     assert "TPM" not in text and "8000" not in text
     assert [b for b in at.button if b.key == "assistant-retry"]
 

@@ -107,6 +107,10 @@ _ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$", re.ASCII)
 _ACCOUNT_ID = re.compile(r"^ACC\d{4}$", re.ASCII)
 _DIGITS = re.compile(r"^\d{1,6}$", re.ASCII)
 _AMOUNT_TEXT = re.compile(r"^\d{1,10}(\.\d{1,2})?$", re.ASCII)
+_MERCHANT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 &.'\-]{1,39}$", re.ASCII)
+# Defence in depth: a merchant search term is part of a name, never an instruction.
+_INSTRUCTION_WORDS = re.compile(
+    r"\b(?:ignore|disregard|override|instructions?|system|prompt|assistant|previous)\b", re.IGNORECASE)
 
 
 def _string(name, value):
@@ -138,6 +142,15 @@ def _choice(allowed):
         return canonical[text.lower()]
 
     return check
+
+
+def _merchant(name, value):
+    text = " ".join(_string(name, value).split())
+    if not _MERCHANT.match(text):
+        raise _Invalid(name, "must be 2-40 characters: letters, digits, spaces, & . ' or -")
+    if _INSTRUCTION_WORDS.search(text):
+        raise _Invalid(name, "must be part of a merchant name")
+    return text
 
 
 def _account_id(name, value):
@@ -201,6 +214,7 @@ TOOL_SPECS = {
         "category": _choice(CATEGORIES),
         "account_id": _account_id,
         "min_amount": _amount,
+        "merchant": _merchant,
         "limit": _limit,
         "offset": _offset,
     }),

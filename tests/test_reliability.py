@@ -175,8 +175,10 @@ def test_rate_limit_is_classified_with_retry_after_and_not_retried_by_engine(sid
 
     failure = caught.value
     assert failure.kind == errors.RATE_LIMITED
-    assert failure.retry_after == 13
-    assert "about 13 seconds" in failure.user_message
+    assert failure.retry_after == 13                     # still classified (logs/diagnostics)
+    # No retry time is promised: the SDK has already waited and retried by now.
+    assert failure.user_message == errors.USER_MESSAGES[errors.RATE_LIMITED]
+    assert "seconds" not in failure.user_message and "13" not in failure.user_message
     assert "TPM" not in failure.user_message and "8000" not in failure.user_message
     assert len(model.calls) == 1        # no engine-level retry loop
     assert stored(sid) is None

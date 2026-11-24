@@ -306,3 +306,13 @@ def test_customer_figures_match_the_generators_independent_balances(approved):
 def test_approved_dataset_has_no_own_account_transfers(approved):
     dataset, _ = approved
     assert ledger.own_account_transfer_pairs(dataset["transactions"]) == []
+
+
+def test_select_transactions_by_merchant():
+    rows = [dict(txn("M1", "2026-09-01", "Debit", "10.00", "Shopping"), merchant="HomeNest"),
+            dict(txn("M2", "2026-09-02", "Credit", "10.00", "Refund", related="M1"), merchant="Refund - HomeNest"),
+            dict(txn("M3", "2026-09-03", "Debit", "5.00", "Dining"), merchant="QuickBite")]
+    assert [t["transaction_id"] for t in ledger.select_transactions(rows, merchant="homenest")] == ["M1", "M2"]
+    assert [t["transaction_id"] for t in ledger.select_transactions(rows, merchant="QUICK")] == ["M3"]
+    assert ledger.select_transactions(rows, merchant="Swiggy") == []
+    assert len(ledger.select_transactions(rows, merchant=None)) == 3

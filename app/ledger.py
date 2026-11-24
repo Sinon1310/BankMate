@@ -213,10 +213,14 @@ def in_period(day, start=None, end=None):
 
 
 def select_transactions(transactions, start=None, end=None, transaction_type=None,
-                        category=None, account_id=None, min_amount=None):
-    """Rows matching every given filter (dates inclusive, `in_period`)."""
+                        category=None, account_id=None, min_amount=None, merchant=None):
+    """
+    Rows matching every given filter (dates inclusive, `in_period`).
+    `merchant` matches a case-insensitive part of the merchant name.
+    """
 
     minimum = money(min_amount) if min_amount is not None else None
+    needle = merchant.casefold() if merchant else None
     return [
         t for t in transactions
         if in_period(t["transaction_date"], start, end)
@@ -224,6 +228,7 @@ def select_transactions(transactions, start=None, end=None, transaction_type=Non
         and (category is None or t["category"] == category)
         and (account_id is None or t["account_id"] == account_id)
         and (minimum is None or money(t["amount"]) >= minimum)
+        and (needle is None or needle in t["merchant"].casefold())
     ]
 
 

@@ -22,8 +22,8 @@ UNEXPECTED = "unexpected"
 
 USER_MESSAGES = {
     RATE_LIMITED: (
-        "BankMate is receiving too many requests right now. "
-        "Please wait a moment and try again."
+        "BankMate's AI service has reached its usage limit for the moment. "
+        "Please wait a minute, then try again; if it still fails, wait a little longer."
     ),
     TIMEOUT: (
         "The AI service took too long to respond. Please try again."
@@ -79,15 +79,11 @@ class AssistantError(Exception):
 
     @property
     def user_message(self):
-        message = USER_MESSAGES.get(self.kind, USER_MESSAGES[UNEXPECTED])
-
-        if self.kind == RATE_LIMITED and self.retry_after:
-            message = (
-                "BankMate is receiving too many requests right now. "
-                f"Please try again in about {self.retry_after} seconds."
-            )
-
-        return message
+        # Rate limits get the same message whatever Retry-After said: by the
+        # time it is shown the SDK has already waited and retried, so the
+        # provider's hint is stale, and its reset time is not guaranteed.
+        # retry_after is kept for logging and diagnostics.
+        return USER_MESSAGES.get(self.kind, USER_MESSAGES[UNEXPECTED])
 
 
 def _retry_after_seconds(error):

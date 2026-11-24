@@ -76,6 +76,8 @@ TypeArg = _hint("Debit or Credit.", type="string", enum=list(tool_args.TRANSACTI
 CategoryArg = _hint("Transaction category.", type="string", enum=list(tool_args.CATEGORIES))
 AccountArg = _hint("One of this customer's account IDs from their profile, e.g. ACC1001.", type="string")
 AmountArg = _hint("Only transactions of at least this amount (INR).", type="number", minimum=0)
+MerchantArg = _hint("Case-insensitive part of the merchant name, e.g. QuickBite.", type="string",
+                    minLength=2, maxLength=40)
 LimitArg = _hint(f"Rows per page (default {tool_args.DEFAULT_TRANSACTION_LIMIT}, "
                  f"max {tool_args.MAX_TRANSACTION_LIMIT}).", type="integer", minimum=1,
                  maximum=tool_args.MAX_TRANSACTION_LIMIT)
@@ -262,7 +264,8 @@ def _legacy_rows(args):
         return None
     return ledger.select_transactions(
         data_loader.find_transactions(args["customer_id"]), args.get("start_date"), args.get("end_date"),
-        transaction_type=args.get("transaction_type"), min_amount=args.get("min_amount"))
+        transaction_type=args.get("transaction_type"), min_amount=args.get("min_amount"),
+        merchant=args.get("merchant"))
 
 
 def _legacy_unsupported():
@@ -288,12 +291,15 @@ def _legacy_transactions(args):
 def get_customer_transactions(customer_id: str, start_date: DateArg = None, end_date: DateArg = None,
                               transaction_type: TypeArg = None, category: CategoryArg = None,
                               account_id: AccountArg = None, min_amount: AmountArg = None,
-                              limit: LimitArg = None, offset: OffsetArg = None) -> str:
+                              merchant: MerchantArg = None, limit: LimitArg = None,
+                              offset: OffsetArg = None) -> str:
     """
     List a customer's transactions, newest first, one page at a time.
     Optional filters: start_date and end_date (YYYY-MM-DD, inclusive),
     transaction_type (Debit or Credit), category (e.g. Dining, Refund),
-    account_id (one of the customer's accounts, e.g. ACC1001), min_amount.
+    account_id (one of the customer's accounts, e.g. ACC1001), min_amount,
+    merchant (case-insensitive part of the name). Use filters to find
+    transactions rather than paging through everything.
     limit (default 20, max 50) and offset page through results.
     total_matching and matching_totals always cover every matching
     transaction; rows cover only this page.
@@ -301,7 +307,7 @@ def get_customer_transactions(customer_id: str, start_date: DateArg = None, end_
 
     raw = {"customer_id": customer_id, "start_date": start_date, "end_date": end_date,
            "transaction_type": transaction_type, "category": category, "account_id": account_id,
-           "min_amount": min_amount, "limit": limit, "offset": offset}
+           "min_amount": min_amount, "merchant": merchant, "limit": limit, "offset": offset}
     checked = _validate("get_customer_transactions", raw)
     if not checked.ok:
         return checked.error
@@ -321,7 +327,8 @@ def get_customer_transactions(customer_id: str, start_date: DateArg = None, end_
     matches = [] if period.empty else ledger.select_transactions(
         index["transactions"].get(customer_id, []), period.start, period.end,
         transaction_type=args.get("transaction_type"), category=args.get("category"),
-        account_id=args.get("account_id"), min_amount=args.get("min_amount"))
+        account_id=args.get("account_id"), min_amount=args.get("min_amount"),
+        merchant=args.get("merchant"))
     matches.sort(key=lambda t: (t["transaction_date"], t["transaction_id"]), reverse=True)
 
     totals = ledger.period_summary(matches, index["by_id"])
@@ -329,7 +336,7 @@ def get_customer_transactions(customer_id: str, start_date: DateArg = None, end_
     has_more = offset + len(page) < len(matches)
 
     filters = {k: args[k] for k in ("start_date", "end_date", "transaction_type", "category",
-                                    "account_id", "min_amount") if k in args}
+                                    "account_id", "min_amount", "merchant") if k in args}
     payload = {
         "customer_id": customer_id,
         "as_of_date": _window()[1],
@@ -355,7 +362,8 @@ def get_customer_transactions(customer_id: str, start_date: DateArg = None, end_
                         _card_last4(t["card_id"]), t["related_transaction_id"]] for t in page]
 
     if not matches:
-        payload["note"] = "No transactions match these filters."
+        payload["note"] = (f"No transactions match these filters in the available data "
+                           f"({period.start.isoformat()} to {period.end.isoformat()}).")
     elif not page:
         payload["note"] = f"offset {offset} is past the last of {len(matches)} matching transactions."
     elif has_more or offset:

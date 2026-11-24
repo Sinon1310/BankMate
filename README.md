@@ -230,6 +230,22 @@ python -m app.evaluate_rag          # Hit@3, Precision@3, section recall, false-
 python -m app.compare_retrieval     # Similarity vs MMR ranking
 ```
 
+Add `--json PATH` to `evaluate_rag` to save the same results with the dataset hash and policy-index fingerprint.
+
+Assistant behaviour is evaluated with 22 cases (customer figures, filters, disputes, policy citations, out-of-scope, authorization, injection, follow-ups, tool limits and failures) in `evals/`. The offline run drives the real assistant loop and tools with a scripted model — no API key, Groq calls or ChromaDB — and scores tool selection, required arguments, whether every ₹ amount in an answer comes from the tool results, expected figures computed from the ledger, citations and refusals:
+
+```bash
+python -m evals.run                                   # JSON report in evals/results/
+python -m evals.compare BASE.json NEW.json --fail-on-regression
+```
+
+A live run uses the real Groq model and production tools on selected cases only. It needs `--confirm-live` and named `--case`s; it enforces case and model-call budgets, paces requests to stay under a tokens- and requests-per-minute limit, stops the whole run at the first rate-limit, authentication or connection failure (the Groq client's automatic retries are disabled for live evaluation only, so each failure is exactly one request; the app keeps its single retry), and runs policy searches on a temporary copy of `chroma_db/`. The report and a cassette of every model response and policy-search output are saved in `evals/baselines/` (API key redacted). A cassette replays offline through the real assistant loop without any API call, failing loudly if the recording doesn't match:
+
+```bash
+python -m evals.run --mode live --confirm-live --baseline NAME --case ID [--case ID ...]
+python -m evals.run --mode replay --cassette evals/baselines/NAME.cassette.json
+```
+
 Current results (k=3, threshold 1.2): Hit@3 0.931, Precision@3 0.859 and section recall 0.786 on 29 policy questions; false-positive rate 0.111 on 9 out-of-scope and near-miss questions.
 
 ## Security notes

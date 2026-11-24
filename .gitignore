@@ -30,3 +30,6 @@ models/
 # Testing
 .pytest_cache/
 .coverage
+
+# Evaluation run outputs (baselines are committed under evals/baselines/)
+evals/results/

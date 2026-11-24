@@ -24,9 +24,15 @@ Metrics (all on results within the production threshold, top-k):
   anything.
 
 Run: python -m app.evaluate_rag
+     python -m app.evaluate_rag --json evals/results/retrieval.json   (also save a JSON report)
 """
 
+import argparse
 import csv
+import hashlib
+import json
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.retriever import POLICY_MAX_DISTANCE, POLICY_SEARCH_K
@@ -182,7 +188,51 @@ def _store_search(question, k):
     return [(document.metadata, distance) for document, distance in search_with_scores(question, k)]
 
 
-def main():
+def build_report(records, summary, sweep, metadata=None):
+    """JSON-serialisable report of an evaluation run (same figures as the printed output)."""
+
+    return {
+        "run": {
+            "kind": "retrieval",
+            "settings": {"k": TOP_K, "max_distance": MAX_DISTANCE, "sweep_thresholds": list(SWEEP_THRESHOLDS)},
+            **(metadata or {}),
+        },
+        "summary": summary,
+        "sweep": {str(threshold): result for threshold, result in sweep.items()},
+        "records": records,
+    }
+
+
+def _report_metadata(path=EVALUATION_FILE):
+    """Reproducibility details: dataset hash, embedding model and policy index fingerprint."""
+
+    import contextlib
+    import io
+
+    from app import vector_store
+
+    with contextlib.redirect_stdout(io.StringIO()):
+        chunks = vector_store.expected_chunks()
+    return {
+        "created_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "dataset": {"file": Path(path).name, "sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest()},
+        "embedding_id": vector_store.EMBEDDING_ID,
+        "policy_index_fingerprint": vector_store.fingerprint(chunks),
+    }
+
+
+def write_json_report(report, path):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Retrieval evaluation (production k and threshold).")
+    parser.add_argument("--json", metavar="PATH", help="Also save the results as a JSON report")
+    args = parser.parse_args(argv)
+
     records, summary, sweep = run_evaluation(_store_search)
 
     print(f"\nBANKMATE RETRIEVAL EVALUATION  (k={TOP_K}, max distance={MAX_DISTANCE}, production settings)")
@@ -218,6 +268,10 @@ def main():
         print(f"  {threshold:<10} {i['hit_rate']:>6} {i['precision']:>10} {i['section_recall']:>8} "
               f"{i['miss_rate']:>6} {n['false_positive_rate']:>7}{marker}")
 
+    if args.json:
+        path = write_json_report(build_report(records, summary, sweep, _report_metadata()), args.json)
+        print(f"\nJSON report: {path}")
+
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])

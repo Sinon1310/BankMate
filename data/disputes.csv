@@ -1,0 +1,9 @@
+dispute_id,transaction_id,raised_on,reason,status,resolved_on,resolution_outcome,refund_transaction_id
+D0001,T00503,2026-06-16,Duplicate charge,Resolved,2026-06-24,Full refund,T00608
+D0002,T01379,2026-09-02,Incorrect amount,Resolved,2026-09-12,Partial refund,T01560
+D0003,T01449,2026-09-04,Unauthorized,Resolved,2026-09-25,No financial adjustment,
+D0004,T00892,2026-07-25,Goods not received,Rejected,2026-08-10,,
+D0005,T02056,2026-10-28,Incorrect amount,Under Investigation,,,
+D0006,T02188,2026-11-04,Unauthorized,Under Investigation,,,
+D0007,T02328,2026-11-15,Duplicate charge,Open,,,
+D0008,T02160,2026-11-17,Goods not received,Open,,,

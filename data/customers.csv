@@ -1,4 +1,31 @@
-customer_id,customer_name,city,account_type
-C101,Arjun Mehta,Mumbai,Savings
-C102,Priya Sharma,Pune,Current
-C103,Rahul Nair,Bengaluru,Savings
+customer_id,customer_name,city,segment,customer_since
+C101,Arjun Mehta,Mumbai,Retail,2019-04-12
+C102,Priya Sharma,Pune,Business,2018-02-20
+C103,Rahul Nair,Bengaluru,Retail,2020-11-03
+C104,Ananya Iyer,Chennai,Premier,2017-08-21
+C105,Vikrant Sethi,Delhi,Business,2019-10-01
+C106,Neha Kulkarni,Pune,Retail,2021-05-09
+C107,Rohan Das,Kolkata,Student,2024-07-22
+C108,Kavya Reddy,Hyderabad,Retail,2020-03-14
+C109,Aditya Joshi,Ahmedabad,Business,2016-12-05
+C110,Meera Pillai,Kochi,Senior,2012-06-18
+C111,Siddharth Rao,Bengaluru,Retail,2022-02-28
+C112,Ishita Banerjee,Kolkata,Retail,2023-09-30
+C113,Kunal Bhatia,Delhi,Premier,2016-04-11
+C114,Pooja Desai,Surat,Business,2020-08-25
+C115,Nikhil Verma,Lucknow,Student,2025-01-08
+C116,Sneha Patil,Mumbai,Retail,2019-07-30
+C117,Arnav Gupta,Jaipur,Student,2024-06-03
+C118,Divya Menon,Kochi,Retail,2021-10-17
+C119,Harsh Agarwal,Jaipur,Business,2022-04-04
+C120,Tanvi Shah,Ahmedabad,Retail,2020-01-27
+C121,Ramesh Iyengar,Chennai,Senior,2010-09-09
+C122,Lakshmi Narayanan,Chennai,Senior,2011-02-14
+C123,Suresh Bhat,Bengaluru,Senior,2014-05-23
+C124,Gopal Krishnan,Hyderabad,Senior,2013-11-11
+C125,Zoya Qureshi,Lucknow,Student,2025-07-01
+C126,Aarav Kapoor,Delhi,Premier,2018-06-06
+C127,Riya Chatterjee,Kolkata,Retail,2020-07-01
+C128,Farhan Siddiqui,Mumbai,Retail,2023-03-15
+C129,Isha Trivedi,Surat,Student,2026-06-12
+C130,Dev Malhotra,Pune,Retail,2026-11-18

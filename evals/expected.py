@@ -1,11 +1,19 @@
 """
-Expected figures, computed at evaluation time from the active dataset.
+Expected figures and facts, computed at evaluation time from the active dataset.
 
 Nothing here is hardcoded: each case names a figure ("period total_debits
 for C102 in October"), and the value comes from app.ledger over the
 loaded dataset, independently of the tool that the assistant calls. If
 the dataset is regenerated, expectations follow it. This module never
 re-implements a financial rule; it only selects rows and calls ledger.
+
+Facts (non-financial) are derived the same way, from the dataset tables
+and app.ledger, never from what a tool returned to the assistant:
+- dispute_status / dispute_outcome: the dispute rows (joined to the
+  customer through the disputed transaction);
+- transaction_ids / transaction_count: ledger.select_transactions with the
+  case's filters;
+- period_range: ledger.clamp_period over the dataset window.
 """
 
 from decimal import Decimal
@@ -15,6 +23,9 @@ from app import data_loader, ledger
 PERIOD_FIELDS = ("total_debits", "total_credits", "net_cash_flow", "income", "other_inflows",
                  "transfer_out_total", "refund_total", "spending_gross", "spending_net")
 FIGURE_KINDS = ("period", "balance", "account_balance", "selection_total", "dispute_amount", "refund_amount")
+FACT_KINDS = ("dispute_status", "dispute_outcome", "transaction_ids", "transaction_count", "period_range")
+SELECTION_FILTERS = ("start", "end", "transaction_type", "category", "account_id", "min_amount", "merchant")
+MAX_LISTED_IDS = 20      # the transaction tool's default page size: more IDs cannot all be expected in one answer
 
 
 class FigureError(ValueError):
@@ -84,6 +95,73 @@ def describe(spec):
 
     parts = [spec.get("figure", "?")]
     for key in ("field", "type", "customer_id", "account_id", "dispute_id"):
+        if spec.get(key):
+            parts.append(str(spec[key]))
+    if spec.get("start") or spec.get("end"):
+        parts.append(f"{spec.get('start', '…')}..{spec.get('end', '…')}")
+    if spec.get("filters"):
+        parts.append(",".join(f"{k}={v}" for k, v in sorted(spec["filters"].items())))
+    return " ".join(parts)
+
+
+# ---------- Facts ----------
+
+def _disputes_for(dataset, spec):
+    tables = dataset.tables
+    by_id = {t["transaction_id"]: t for t in tables["transactions"]}
+    if spec.get("dispute_id"):
+        rows = [d for d in tables["disputes"] if d["dispute_id"] == spec["dispute_id"]]
+    else:
+        rows = [d for d in tables["disputes"]
+                if by_id.get(d["transaction_id"], {}).get("customer_id") == spec["customer_id"]]
+    if not rows:
+        raise FigureError(f"no disputes for {spec.get('dispute_id') or spec.get('customer_id')}")
+    return sorted(rows, key=lambda d: d["dispute_id"])
+
+
+def fact(spec):
+    """
+    Expected value of one fact spec:
+    {"kind", "label", "expected": ...} where `expected` is a list of
+    {"dispute_id", "status"} / {"dispute_id", "outcome", "refunded"},
+    a sorted list of transaction IDs, an integer count, or [start, end] ISO dates.
+    """
+
+    dataset = _tables()
+    kind = spec.get("fact")
+    label = describe_fact(spec)
+
+    if kind == "dispute_status":
+        return {"kind": kind, "label": label,
+                "expected": [{"dispute_id": d["dispute_id"], "status": d["status"]}
+                             for d in _disputes_for(dataset, spec)]}
+
+    if kind == "dispute_outcome":
+        return {"kind": kind, "label": label,
+                "expected": [{"dispute_id": d["dispute_id"], "outcome": d["resolution_outcome"] or None,
+                              "refunded": bool(d["refund_transaction_id"])}
+                             for d in _disputes_for(dataset, spec)]}
+
+    if kind in ("transaction_ids", "transaction_count"):
+        rows = ledger.select_transactions(_customer_rows(dataset.tables, spec["customer_id"]),
+                                          **dict(spec.get("filters", {})))
+        if kind == "transaction_count":
+            return {"kind": kind, "label": label, "expected": len(rows)}
+        if len(rows) > MAX_LISTED_IDS:
+            raise FigureError(f"{label}: {len(rows)} transactions match; at most {MAX_LISTED_IDS} can be expected")
+        return {"kind": kind, "label": label, "expected": sorted(t["transaction_id"] for t in rows)}
+
+    if kind == "period_range":
+        period = ledger.clamp_period(spec.get("start"), spec.get("end"),
+                                     dataset.meta["window_start"], dataset.meta["as_of_date"])
+        return {"kind": kind, "label": label, "expected": [period.start.isoformat(), period.end.isoformat()]}
+
+    raise FigureError(f"unknown fact kind {kind!r}")
+
+
+def describe_fact(spec):
+    parts = [spec.get("fact", "?")]
+    for key in ("customer_id", "dispute_id"):
         if spec.get(key):
             parts.append(str(spec[key]))
     if spec.get("start") or spec.get("end"):

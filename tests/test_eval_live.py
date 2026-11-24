@@ -28,7 +28,7 @@ from scripts import generate_data as gen
 
 SIX = ["profile_balances_c101", "metrics_october_c102", "net_spending_c106",       # case-file order
        "transactions_merchant_c106", "dispute_status_c111", "policy_refund_approved"]
-TIMING = ("latency_ms_mean", "latency_ms_p95")
+from evals.scorers import MODE_DEPENDENT  # noqa: E402  (latency, pacing, tokens consumed)
 
 
 @pytest.fixture(scope="module")
@@ -113,7 +113,7 @@ def connection_error():
 
 
 def comparable(metrics):
-    return {k: v for k, v in metrics.items() if k not in TIMING}
+    return {k: v for k, v in metrics.items() if k not in MODE_DEPENDENT}
 
 
 # ---------- Refusals happen before any model call ----------
@@ -465,8 +465,8 @@ def test_replay_fails_on_missing_case_changed_case_or_wrong_file(recorded, tmp_p
     path.write_text(json.dumps(cassette))
     with pytest.raises(CassetteError, match="not in the cassette: net_spending_c106"):
         run.run_replay(path, only=["net_spending_c106"])
-    with pytest.raises(CassetteMismatch, match="changed since it was recorded"):
-        _replay_mutated(recorded, lambda c: c["run"]["case_sha256"].update(metrics_october_c102="x"))
+    with pytest.raises(CassetteMismatch, match="questions or injected tool failures changed"):
+        _replay_mutated(recorded, lambda c: c["run"]["case_input_sha256"].update(metrics_october_c102="x"))
     with pytest.raises(CassetteMismatch, match="dataset differs"):
         _replay_mutated(recorded, lambda c: c["run"].update(dataset_sha256="x"))
     not_cassette = tmp_path / "report.json"

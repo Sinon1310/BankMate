@@ -9,6 +9,13 @@ policy index, retrieval settings, cases), every metric with its change
 (better / worse by the metric's direction), and cases whose result
 changed. With --fail-on-regression the exit code is 1 when a gated
 metric got worse or a case went from pass to fail.
+
+Latency, pacing and tokens-consumed depend on where a run happened (the
+provider, a local replay, a scripted model); between runs of different
+modes they are shown as "n/a (mode)" and never count as a change. The
+execution fingerprint (what the model was given) and the evaluation
+fingerprint (how answers were judged) are compared separately, so a
+re-scored replay reads as "same execution, different evaluation".
 """
 
 import argparse
@@ -16,7 +23,7 @@ import json
 import sys
 from pathlib import Path
 
-from evals.scorers import GATED, HIGHER_IS_BETTER, LOWER_IS_BETTER
+from evals.scorers import GATED, HIGHER_IS_BETTER, LOWER_IS_BETTER, MODE_DEPENDENT
 
 
 def load(path):
@@ -33,10 +40,16 @@ def compare(baseline, candidate):
     base_c, cand_c = baseline["run"].get("components", {}), candidate["run"].get("components", {})
     changed_components = sorted(k for k in set(base_c) | set(cand_c) if base_c.get(k) != cand_c.get(k))
 
+    modes = (baseline["run"].get("mode"), candidate["run"].get("mode"))
+    cross_mode = modes[0] != modes[1]
     metrics = []
     for name in list(dict.fromkeys(list(baseline["metrics"]) + list(candidate["metrics"]))):
         a, b = baseline["metrics"].get(name), candidate["metrics"].get(name)
         status = "same"
+        if cross_mode and name in MODE_DEPENDENT:
+            metrics.append({"metric": name, "baseline": a, "candidate": b, "status": "not_comparable",
+                            "gated": False, "delta": None})
+            continue
         if isinstance(a, (int, float)) and isinstance(b, (int, float)) and a != b:
             if name in HIGHER_IS_BETTER:
                 status = "better" if b > a else "worse"
@@ -66,7 +79,14 @@ def compare(baseline, candidate):
     return {"changed_components": changed_components, "metrics": metrics,
             "case_changes": case_changes, "regressions": regressions,
             "same_cases": baseline["run"].get("cases", {}).get("sha256") == candidate["run"].get("cases", {}).get("sha256"),
-            "modes": (baseline["run"].get("mode"), candidate["run"].get("mode"))}
+            "same_execution": _same_key(baseline, candidate, "execution_fingerprint"),
+            "same_evaluation": _same_key(baseline, candidate, "evaluation_fingerprint"),
+            "modes": modes}
+
+
+def _same_key(baseline, candidate, key):
+    a, b = baseline["run"].get(key), candidate["run"].get(key)
+    return None if a is None or b is None else a == b
 
 
 def _fmt(value):
@@ -87,10 +107,14 @@ def main(argv=None):
         print(f"note: comparing a {result['modes'][0]} run with a {result['modes'][1]} run")
     if not result["same_cases"]:
         print("note: the case files differ; per-case changes include added/removed cases")
+    labels = {True: "same", False: "DIFFERENT", None: "unknown (older report)"}
+    print(f"Execution fingerprint: {labels[result['same_execution']]}   "
+          f"evaluation fingerprint: {labels[result['same_evaluation']]}")
     print("\nChanged components: " + (", ".join(result["changed_components"]) or "none"))
     print(f"\n  {'metric':<26} {'baseline':>11} {'candidate':>11} {'delta':>9}  status")
     for m in result["metrics"]:
-        flag = {"better": "better", "worse": "WORSE" if m["gated"] else "worse"}.get(m["status"], "")
+        flag = {"better": "better", "worse": "WORSE" if m["gated"] else "worse",
+                "not_comparable": "n/a (mode)"}.get(m["status"], "")
         print(f"  {m['metric']:<26} {_fmt(m['baseline']):>11} {_fmt(m['candidate']):>11} "
               f"{_fmt(m['delta']):>9}  {flag}")
     if result["case_changes"]:

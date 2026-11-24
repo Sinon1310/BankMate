@@ -14,7 +14,11 @@ Evaluation cases (evals/datasets/assistant_cases.jsonl), one JSON object per lin
                                           tool_limit | error:<AssistantError kind>
         "tools": ["get_customer_metrics"],          set of tools the model should request
         "args": [{"tool": "...", "match": {...}}],  required arguments (subset match)
-        "figures": [{"figure": "period", ...}],     computed from app.ledger at run time
+        "figures": [{"figure": "period", ...,       computed from app.ledger at run time
+                     "required": true}],            false = optional context: reported, never fails
+        "facts": [{"fact": "dispute_status",        non-financial facts derived from the dataset/ledger:
+                   "customer_id": "C111"}],         dispute_status | dispute_outcome | transaction_ids |
+                                                    transaction_count | period_range
         "citations": ["POL-001"],                   default [] (no sources shown)
         "blocked": ["ACCESS_DENIED"],               refusals the assistant must return
         "contains": ["..."]                         required phrases (use sparingly)
@@ -33,7 +37,9 @@ import hashlib
 import json
 from pathlib import Path
 
-from evals.expected import FIGURE_KINDS
+import re
+
+from evals.expected import FACT_KINDS, FIGURE_KINDS, PERIOD_FIELDS, SELECTION_FILTERS
 from evals.scorers import BLOCKED_STATUSES, OUTCOMES
 
 CASES_FILE = Path(__file__).resolve().parent / "datasets" / "assistant_cases.jsonl"
@@ -42,7 +48,25 @@ CATEGORIES = ("profile", "transactions", "metrics", "disputes", "policy", "out_o
               "authorization", "injection", "multi_turn", "clarification", "reliability")
 TOOLS = ("get_customer_profile", "get_customer_transactions", "get_customer_metrics",
          "get_customer_disputes", "search_banking_policies")
-EXPECT_KEYS = {"outcome", "tools", "args", "figures", "citations", "blocked", "contains"}
+EXPECT_KEYS = {"outcome", "tools", "args", "figures", "facts", "citations", "blocked", "contains"}
+CUSTOMER_ID = re.compile(r"C\d{3}$")
+ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}$")
+# {kind: (required keys, optional keys)}; "required" and "label" are allowed on every figure.
+FIGURE_KEYS = {
+    "period": ({"field", "customer_id"}, {"start", "end"}),
+    "balance": ({"customer_id"}, {"date"}),
+    "account_balance": ({"account_id"}, {"date"}),
+    "selection_total": ({"customer_id", "type"}, {"filters"}),
+    "dispute_amount": ({"dispute_id"}, set()),
+    "refund_amount": ({"dispute_id"}, set()),
+}
+FACT_KEYS = {
+    "dispute_status": (set(), {"customer_id", "dispute_id"}),
+    "dispute_outcome": (set(), {"customer_id", "dispute_id"}),
+    "transaction_ids": ({"customer_id"}, {"filters"}),
+    "transaction_count": ({"customer_id"}, {"filters"}),
+    "period_range": (set(), {"customer_id", "start", "end"}),
+}
 
 
 class CaseError(ValueError):
@@ -64,8 +88,9 @@ def _check_turn(case_id, number, turn):
         if name not in TOOLS:
             raise CaseError(f"{where}: unknown tool {name!r}")
     for spec in expect.get("figures", []):
-        if spec.get("figure") not in FIGURE_KINDS:
-            raise CaseError(f"{where}: unknown figure kind {spec.get('figure')!r}")
+        _check_figure(where, spec)
+    for spec in expect.get("facts", []):
+        _check_fact(where, spec)
     for status in expect.get("blocked", []):
         if status not in BLOCKED_STATUSES:
             raise CaseError(f"{where}: unknown blocked status {status!r}")
@@ -78,6 +103,52 @@ def _check_turn(case_id, number, turn):
         for call in step.get("tool_calls", []):
             if call.get("name") not in TOOLS:
                 raise CaseError(f"{where}: script calls unknown tool {call.get('name')!r}")
+
+
+def _check_keys(where, what, spec, required, optional):
+    missing = required - set(spec)
+    unknown = set(spec) - required - optional
+    if missing:
+        raise CaseError(f"{where}: {what} is missing {sorted(missing)}")
+    if unknown:
+        raise CaseError(f"{where}: {what} has unknown keys {sorted(unknown)}")
+    if "customer_id" in spec and not CUSTOMER_ID.match(str(spec["customer_id"])):
+        raise CaseError(f"{where}: {what} has an invalid customer_id {spec['customer_id']!r}")
+    for key in ("start", "end", "date"):
+        if key in spec and not ISO_DATE.match(str(spec[key])):
+            raise CaseError(f"{where}: {what} {key} must be an ISO date")
+    filters = spec.get("filters", {})
+    if not isinstance(filters, dict) or set(filters) - set(SELECTION_FILTERS):
+        raise CaseError(f"{where}: {what} filters must use {list(SELECTION_FILTERS)}")
+
+
+def _check_figure(where, spec):
+    kind = spec.get("figure")
+    if kind not in FIGURE_KINDS:
+        raise CaseError(f"{where}: unknown figure kind {kind!r}")
+    required, optional = FIGURE_KEYS[kind]
+    _check_keys(where, f"figure {kind}", spec, required | {"figure"}, optional | {"required", "label"})
+    if "required" in spec and not isinstance(spec["required"], bool):
+        raise CaseError(f"{where}: figure {kind} 'required' must be true or false")
+    if kind == "period" and spec["field"] not in PERIOD_FIELDS:
+        raise CaseError(f"{where}: unknown period field {spec['field']!r}")
+    if kind == "selection_total" and spec["type"] not in ("Debit", "Credit"):
+        raise CaseError(f"{where}: selection_total type must be Debit or Credit")
+    if "label" in spec:
+        try:
+            re.compile(spec["label"])
+        except (re.error, TypeError) as error:
+            raise CaseError(f"{where}: figure {kind} label is not a valid regex ({error})") from None
+
+
+def _check_fact(where, spec):
+    kind = spec.get("fact")
+    if kind not in FACT_KINDS:
+        raise CaseError(f"{where}: unknown fact kind {kind!r}")
+    required, optional = FACT_KEYS[kind]
+    _check_keys(where, f"fact {kind}", spec, required | {"fact"}, optional)
+    if kind.startswith("dispute_") and ("customer_id" in spec) == ("dispute_id" in spec):
+        raise CaseError(f"{where}: fact {kind} needs exactly one of customer_id / dispute_id")
 
 
 def load_cases(path=CASES_FILE, only=None):

@@ -1,0 +1,1153 @@
+{
+  "run": {
+    "schema_version": 1,
+    "mode": "live",
+    "created_utc": "2026-11-24T09:55:55Z",
+    "git": {
+      "commit": "23d85288f3338dfca499892a8729174895f938a8",
+      "dirty": false
+    },
+    "model": {
+      "id": "openai/gpt-oss-20b",
+      "live": true,
+      "provider": "groq"
+    },
+    "dataset": {
+      "format": "v1",
+      "folder": "data",
+      "as_of_date": "2026-11-21",
+      "row_counts": {
+        "customers": 30,
+        "accounts": 42,
+        "cards": 39,
+        "transactions": 2460,
+        "disputes": 8
+      },
+      "sha256": "35fe84c6cb19943ce3073f7b5771e6292a3bd67f71e4e903acc09fb73c256d33"
+    },
+    "cases": {
+      "file": "evals/datasets/assistant_cases.jsonl",
+      "sha256": "f5f20971b3de44a42f47ef5bdfc781c2dcf86722d42e91117ca6da69ea0b0512",
+      "count": 6
+    },
+    "components": {
+      "system_prompt_sha256": "4122b5b83aa7c4a7748e19ac0a5df29374250cd89abca95ffe748c4b2fc71985",
+      "tool_schemas_sha256": "430d3c0a2b624620f1f63be004f7c92c72ce4c86a7a65b2d68d566b45999cfb1",
+      "model": "openai/gpt-oss-20b",
+      "dataset_sha256": "35fe84c6cb19943ce3073f7b5771e6292a3bd67f71e4e903acc09fb73c256d33",
+      "policy_index_fingerprint": "c8799fcee6a2dae47216183dd55bf1f4ee75d420fe46d6edd022a0f63a8635fc",
+      "retrieval": {
+        "k": 3,
+        "max_distance": 1.2
+      },
+      "max_tool_steps": 5,
+      "cases_sha256": "f5f20971b3de44a42f47ef5bdfc781c2dcf86722d42e91117ca6da69ea0b0512",
+      "evaluator_schema": 1,
+      "evaluator_code_sha256": {
+        "recorder.py": "708a7207956ec73b667d171c940376f2502fdef80888af216e47f4eb078e3579",
+        "scorers.py": "2226daa2fdc067f4fe31939469d35f54b3ddad8c829db2ba2ccbdf0451f02295",
+        "cases.py": "0f7a1837ece9522934c8992ccacaa0ad16cf186e8e9e432f5d3137d626ad3aaa",
+        "expected.py": "310169172b28e6c4844b3e86b0337fa3bf63f69db149f8ead3ef566997119d7b",
+        "run.py": "b808cf99148570698db725dcdff7f298f393300729639d6d9ee200da4bced491",
+        "cassette.py": "879f9846a3c8463df0f94147ebe4a2d34c260e3b3ea8ffb41844e3459f24db33",
+        "live.py": "cc0db80b57dbedcab681a131fee706f13ce5d86ec2f5cbf73ed523fb10f5baa9"
+      }
+    },
+    "fingerprint": "8295cb2b2749763c6d76f9fbfcd8e155bb91d1144540b50f9ceb8cc9207d0a03",
+    "environment": {
+      "python": "3.9.6",
+      "platform": "darwin"
+    }
+  },
+  "live": {
+    "settings": {
+      "max_cases": 6,
+      "max_model_calls": 30,
+      "tokens_per_minute": 6000,
+      "requests_per_minute": 15,
+      "case_pause_seconds": 5.0
+    },
+    "model_calls": 12,
+    "budget": {
+      "max": 30,
+      "used": 12
+    },
+    "pacing": {
+      "waits": 11,
+      "waited_seconds": 660.5
+    },
+    "selected_cases": [
+      "profile_balances_c101",
+      "metrics_october_c102",
+      "net_spending_c106",
+      "transactions_merchant_c106",
+      "dispute_status_c111",
+      "policy_refund_approved"
+    ],
+    "completed_cases": [
+      "profile_balances_c101",
+      "metrics_october_c102",
+      "net_spending_c106",
+      "transactions_merchant_c106",
+      "dispute_status_c111",
+      "policy_refund_approved"
+    ],
+    "stopped": null,
+    "not_run": [],
+    "integrity": {
+      "dataset_unchanged": true,
+      "index_unchanged": true,
+      "index_isolated": true
+    },
+    "provider_retries": {
+      "chat_model": 0,
+      "sdk_client": 0
+    },
+    "timeout_seconds": 30.0,
+    "cassette": {
+      "file": "phase2-live-6.cassette.json",
+      "sha256": "c7852fc59955f71180607cbbe0acbdea2aa26a0cb40af7b269fd2c7649fe528d"
+    }
+  },
+  "metrics": {
+    "cases": 6,
+    "turns": 6,
+    "case_pass_rate": 0.5,
+    "turn_pass_rate": 0.5,
+    "outcome_accuracy": 1.0,
+    "tool_selection_exact": 1.0,
+    "tool_precision": 1.0,
+    "tool_recall": 1.0,
+    "argument_accuracy": 1.0,
+    "amounts_in_answers": 6,
+    "amount_grounding_rate": 1.0,
+    "unsupported_amounts": 0,
+    "figure_recall": 0.6,
+    "citation_precision": 1.0,
+    "citation_recall": 1.0,
+    "no_citation_accuracy": 1.0,
+    "authorization_pass_rate": null,
+    "contains_pass_rate": null,
+    "tool_limit_hits": 0,
+    "errors": 0,
+    "unexpected_errors": 0,
+    "grounding_revisions": 0,
+    "model_calls_mean": 2.0,
+    "model_calls_max": 2,
+    "tool_executions_mean": 1.0,
+    "latency_ms_mean": 108289.794,
+    "latency_ms_p95": 117982.939,
+    "tokens_total": 34330,
+    "tokens_per_turn_mean": 5721.6667
+  },
+  "by_category": {
+    "disputes": {
+      "cases": 1,
+      "passed": 0,
+      "pass_rate": 0.0
+    },
+    "metrics": {
+      "cases": 2,
+      "passed": 1,
+      "pass_rate": 0.5
+    },
+    "policy": {
+      "cases": 1,
+      "passed": 1,
+      "pass_rate": 1.0
+    },
+    "profile": {
+      "cases": 1,
+      "passed": 1,
+      "pass_rate": 1.0
+    },
+    "transactions": {
+      "cases": 1,
+      "passed": 0,
+      "pass_rate": 0.0
+    }
+  },
+  "cases": [
+    {
+      "id": "profile_balances_c101",
+      "category": "profile",
+      "description": "Profile with total and per-account balances from the ledger.",
+      "passed": true,
+      "turns": [
+        {
+          "question": "Show me C101's profile and account balances.",
+          "expect": {
+            "tools": [
+              "get_customer_profile"
+            ],
+            "args": [
+              {
+                "tool": "get_customer_profile",
+                "match": {
+                  "customer_id": "C101"
+                }
+              }
+            ],
+            "figures": [
+              {
+                "figure": "balance",
+                "customer_id": "C101"
+              },
+              {
+                "figure": "account_balance",
+                "account_id": "ACC1001"
+              },
+              {
+                "figure": "account_balance",
+                "account_id": "ACC1002"
+              }
+            ]
+          },
+          "observed": {
+            "answer": "**Customer Profile – C101**\n\n- **Name:** Arjun Mehta  \n- **City:** Mumbai  \n- **Segment:** Retail  \n- **Customer Since:** 12‑Apr‑2019  \n- **Account Type:** Savings + Current  \n\n**Accounts (as of 21‑Nov‑2026)**  \n\n| Account ID | Type     | Balance (₹) |\n|------------|----------|-------------|\n| ACC1001    | Savings  | ₹105,465.46 |\n| ACC1002    | Current  | ₹81,761.34  |\n\n**Total Balance:** ₹187,226.80  \n\n**Cards**  \n- Mastercard ending 6368 (linked to ACC1001)  \n- RuPay ending 5298 (linked to ACC1002)",
+            "sources": [],
+            "requested_tools": [
+              {
+                "name": "get_customer_profile",
+                "args": {
+                  "customer_id": "C101"
+                },
+                "id": "fc_e7460833-e08e-4018-8b0f-0507ef488140"
+              }
+            ],
+            "executed_tools": [
+              {
+                "name": "get_customer_profile",
+                "args": {
+                  "customer_id": "C101"
+                },
+                "status": "ok",
+                "error": null,
+                "latency_ms": 2.261,
+                "output_chars": 1125
+              }
+            ],
+            "blocked": [],
+            "model_calls": [
+              {
+                "latency_ms": 785.563,
+                "tool_calls": [
+                  {
+                    "name": "get_customer_profile",
+                    "args": {
+                      "customer_id": "C101"
+                    },
+                    "id": "fc_e7460833-e08e-4018-8b0f-0507ef488140"
+                  }
+                ],
+                "has_answer": false,
+                "final": false,
+                "usage": {
+                  "input_tokens": 2488,
+                  "output_tokens": 40,
+                  "total_tokens": 2528
+                },
+                "role": "tool_calls"
+              },
+              {
+                "latency_ms": 675.519,
+                "tool_calls": [],
+                "has_answer": true,
+                "final": true,
+                "usage": {
+                  "input_tokens": 2838,
+                  "output_tokens": 202,
+                  "total_tokens": 3040
+                },
+                "paced_ms": 60497.405,
+                "role": "answer"
+              }
+            ],
+            "revisions": 0,
+            "tool_limit": false,
+            "error_kind": null,
+            "latency_ms": 61961.396
+          },
+          "score": {
+            "checks": {
+              "outcome": true,
+              "tools": true,
+              "arguments": true,
+              "amounts": true,
+              "figures": true,
+              "citations": true,
+              "authorization": null,
+              "contains": null
+            },
+            "detail": {
+              "outcome": {
+                "expected": "answer",
+                "actual": "answer"
+              },
+              "tools": {
+                "expected": [
+                  "get_customer_profile"
+                ],
+                "actual": [
+                  "get_customer_profile"
+                ],
+                "true_positive": 1,
+                "precision": 1.0,
+                "recall": 1.0
+              },
+              "arguments": [
+                {
+                  "tool": "get_customer_profile",
+                  "match": {
+                    "customer_id": "C101"
+                  },
+                  "passed": true
+                }
+              ],
+              "amounts": {
+                "in_answer": 3,
+                "unsupported": []
+              },
+              "figures": [
+                {
+                  "figure": "balance C101",
+                  "expected": "187226.80",
+                  "found": true
+                },
+                {
+                  "figure": "account_balance ACC1001",
+                  "expected": "105465.46",
+                  "found": true
+                },
+                {
+                  "figure": "account_balance ACC1002",
+                  "expected": "81761.34",
+                  "found": true
+                }
+              ],
+              "citations": {
+                "expected": [],
+                "actual": [],
+                "true_positive": 0,
+                "precision": 1.0,
+                "recall": 1.0
+              }
+            },
+            "outcome": "answer",
+            "passed": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "metrics_october_c102",
+      "category": "metrics",
+      "description": "Credits and debits for one calendar month (inclusive dates).",
+      "passed": true,
+      "turns": [
+        {
+          "question": "What were C102's credits and debits in October 2026?",
+          "expect": {
+            "tools": [
+              "get_customer_metrics"
+            ],
+            "args": [
+              {
+                "tool": "get_customer_metrics",
+                "match": {
+                  "customer_id": "C102",
+                  "start_date": "2026-10-01",
+                  "end_date": "2026-10-31"
+                }
+              }
+            ],
+            "figures": [
+              {
+                "figure": "period",
+                "field": "total_credits",
+                "customer_id": "C102",
+                "start": "2026-10-01",
+                "end": "2026-10-31"
+              },
+              {
+                "figure": "period",
+                "field": "total_debits",
+                "customer_id": "C102",
+                "start": "2026-10-01",
+                "end": "2026-10-31"
+              }
+            ]
+          },
+          "observed": {
+            "answer": "C102’s transaction totals for October 2026 were:\n\n- **Credits:** ₹306,300.00  \n- **Debits:** ₹65,384.42  \n\nThese figures cover all transactions from 2026‑10‑01 to 2026‑10‑31.",
+            "sources": [],
+            "requested_tools": [
+              {
+                "name": "get_customer_metrics",
+                "args": {
+                  "customer_id": "C102",
+                  "end_date": "2026-10-31",
+                  "start_date": "2026-10-01"
+                },
+                "id": "fc_0c405d17-4c54-417b-ab28-4028391020d8"
+              }
+            ],
+            "executed_tools": [
+              {
+                "name": "get_customer_metrics",
+                "args": {
+                  "customer_id": "C102",
+                  "start_date": "2026-10-01",
+                  "end_date": "2026-10-31"
+                },
+                "status": "ok",
+                "error": null,
+                "latency_ms": 5.636,
+                "output_chars": 1862
+              }
+            ],
+            "blocked": [],
+            "model_calls": [
+              {
+                "latency_ms": 669.155,
+                "tool_calls": [
+                  {
+                    "name": "get_customer_metrics",
+                    "args": {
+                      "customer_id": "C102",
+                      "end_date": "2026-10-31",
+                      "start_date": "2026-10-01"
+                    },
+                    "id": "fc_0c405d17-4c54-417b-ab28-4028391020d8"
+                  }
+                ],
+                "has_answer": false,
+                "final": false,
+                "usage": {
+                  "input_tokens": 2493,
+                  "output_tokens": 91,
+                  "total_tokens": 2584
+                },
+                "paced_ms": 55486.584,
+                "role": "tool_calls"
+              },
+              {
+                "latency_ms": 792.095,
+                "tool_calls": [],
+                "has_answer": true,
+                "final": true,
+                "usage": {
+                  "input_tokens": 3094,
+                  "output_tokens": 130,
+                  "total_tokens": 3224
+                },
+                "paced_ms": 60493.722,
+                "role": "answer"
+              }
+            ],
+            "revisions": 0,
+            "tool_limit": false,
+            "error_kind": null,
+            "latency_ms": 117448.165
+          },
+          "score": {
+            "checks": {
+              "outcome": true,
+              "tools": true,
+              "arguments": true,
+              "amounts": true,
+              "figures": true,
+              "citations": true,
+              "authorization": null,
+              "contains": null
+            },
+            "detail": {
+              "outcome": {
+                "expected": "answer",
+                "actual": "answer"
+              },
+              "tools": {
+                "expected": [
+                  "get_customer_metrics"
+                ],
+                "actual": [
+                  "get_customer_metrics"
+                ],
+                "true_positive": 1,
+                "precision": 1.0,
+                "recall": 1.0
+              },
+              "arguments": [
+                {
+                  "tool": "get_customer_metrics",
+                  "match": {
+                    "customer_id": "C102",
+                    "start_date": "2026-10-01",
+                    "end_date": "2026-10-31"
+                  },
+                  "passed": true
+                }
+              ],
+              "amounts": {
+                "in_answer": 2,
+                "unsupported": []
+              },
+              "figures": [
+                {
+                  "figure": "period total_credits C102 2026-10-01..2026-10-31",
+                  "expected": "306300.00",
+                  "found": true
+                },
+                {
+                  "figure": "period total_debits C102 2026-10-01..2026-10-31",
+                  "expected": "65384.42",
+                  "found": true
+                }
+              ],
+              "citations": {
+                "expected": [],
+                "actual": [],
+                "true_positive": 0,
+                "precision": 1.0,
+                "recall": 1.0
+              }
+            },
+            "outcome": "answer",
+            "passed": true
+          }
+        }
+      ]
+    },
+    {
+      "id": "net_spending_c106",
+      "category": "metrics",
+      "description": "Gross vs net spending (refunds reduce spending; transfers out excluded).",
+      "passed": false,
+      "turns": [
+        {
+          "question": "What was C106's spending after refunds?",
+          "expect": {
+            "tools": [
+              "get_customer_metrics"
+            ],
+            "args": [
+              {
+                "tool": "get_customer_metrics",
+                "match": {
+                  "customer_id": "C106"
+                }
+              }
+            ],
+            "figures": [
+              {
+                "figure": "period",
+                "field": "spending_net",
+                "customer_id": "C106"
+              },
+              {
+                "figure": "period",
+                "field": "spending_gross",
+                "customer_id": "C106"
+              }
+            ]
+          },
+          "observed": {
+            "answer": "C106’s spending after accounting for refunds was ₹283,041.30.",
+            "sources": [],
+            "requested_tools": [
+              {
+                "name": "get_customer_metrics",
+                "args": {
+                  "customer_id": "C106"
+                },
+                "id": "fc_6f1106df-b818-44fe-ac80-448e8985db72"
+              }
+            ],
+            "executed_tools": [
+              {
+                "name": "get_customer_metrics",
+                "args": {
+                  "customer_id": "C106"
+                },
+                "status": "ok",
+                "error": null,
+                "latency_ms": 3.836,
+                "output_chars": 2756
+              }
+            ],
+            "blocked": [],
+            "model_calls": [
+              {
+                "latency_ms": 667.159,
+                "tool_calls": [
+                  {
+                    "name": "get_customer_metrics",
+                    "args": {
+                      "customer_id": "C106"
+                    },
+                    "id": "fc_6f1106df-b818-44fe-ac80-448e8985db72"
+                  }
+                ],
+                "has_answer": false,
+                "final": false,
+                "usage": {
+                  "input_tokens": 2487,
+                  "output_tokens": 104,
+                  "total_tokens": 2591
+                },
+                "paced_ms": 55486.922,
+                "role": "tool_calls"
+              },
+              {
+                "latency_ms": 904.648,
+                "tool_calls": [],
+                "has_answer": true,
+                "final": true,
+                "usage": {
+                  "input_tokens": 3364,
+                  "output_tokens": 76,
+                  "total_tokens": 3440
+                },
+                "paced_ms": 60495.802,
+                "role": "answer"
+              }
+            ],
+            "revisions": 0,
+            "tool_limit": false,
+            "error_kind": null,
+            "latency_ms": 117559.067
+          },
+          "score": {
+            "checks": {
+              "outcome": true,
+              "tools": true,
+              "arguments": true,
+              "amounts": true,
+              "figures": false,
+              "citations": true,
+              "authorization": null,
+              "contains": null
+            },
+            "detail": {
+              "outcome": {
+                "expected": "answer",
+                "actual": "answer"
+              },
+              "tools": {
+                "expected": [
+                  "get_customer_metrics"
+                ],
+                "actual": [
+                  "get_customer_metrics"
+                ],
+                "true_positive": 1,
+                "precision": 1.0,
+                "recall": 1.0
+              },
+              "arguments": [
+                {
+                  "tool": "get_customer_metrics",
+                  "match": {
+                    "customer_id": "C106"
+                  },
+                  "passed": true
+                }
+              ],
+              "amounts": {
+                "in_answer": 1,
+                "unsupported": []
+              },
+              "figures": [
+                {
+                  "figure": "period spending_net C106",
+                  "expected": "283041.30",
+                  "found": true
+                },
+                {
+                  "figure": "period spending_gross C106",
+                  "expected": "288931.30",
+                  "found": false
+                }
+              ],
+              "citations": {
+                "expected": [],
+                "actual": [],
+                "true_positive": 0,
+                "precision": 1.0,
+                "recall": 1.0
+              }
+            },
+            "outcome": "answer",
+            "passed": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "transactions_merchant_c106",
+      "category": "transactions",
+      "description": "Merchant filter; totals cover every matching transaction.",
+      "passed": false,
+      "turns": [
+        {
+          "question": "Show C106's HomeNest transactions.",
+          "expect": {
+            "tools": [
+              "get_customer_transactions"
+            ],
+            "args": [
+              {
+                "tool": "get_customer_transactions",
+                "match": {
+                  "customer_id": "C106",
+                  "merchant": "HomeNest"
+                }
+              }
+            ],
+            "figures": [
+              {
+                "figure": "selection_total",
+                "customer_id": "C106",
+                "type": "Debit",
+                "filters": {
+                  "merchant": "HomeNest"
+                }
+              },
+              {
+                "figure": "selection_total",
+                "customer_id": "C106",
+                "type": "Credit",
+                "filters": {
+                  "merchant": "HomeNest"
+                }
+              }
+            ]
+          },
+          "observed": {
+            "answer": "**C106 – HomeNest transactions (2026‑05‑01 to 2026‑11‑21)**  \n\n| Transaction ID | Date       | Type   | Amount (₹) | Category | Merchant | Card (last 4) | Refund of |\n|-----------------|------------|--------|------------|----------|----------|---------------|-----------|\n| T01603 | 2026‑09‑16 | Debit  | 4 686,00 | Shopping | HomeNest | 8323 | – |\n| T01121 | 2026‑08‑04 | Debit  | 8 081,00 | Shopping | HomeNest | 8323 | – |\n| T00951 | 2026‑07‑19 | Debit  | 1 953,78 | Shopping | HomeNest | 8323 | – |\n| T00788 | 2026‑07‑06 | Credit | 5 890,00 | Refund   | Refund – HomeNest | 8323 | T00637 |\n| T00637 | 2026‑06‑27 | Debit  | 5 890,00 | Shopping | HomeNest | 8323 | – |\n\n*All amounts are in Indian Rupees (₹).*",
+            "sources": [],
+            "requested_tools": [
+              {
+                "name": "get_customer_transactions",
+                "args": {
+                  "customer_id": "C106",
+                  "merchant": "HomeNest"
+                },
+                "id": "fc_d38269ee-994b-4a7c-93c1-5917a964cf45"
+              }
+            ],
+            "executed_tools": [
+              {
+                "name": "get_customer_transactions",
+                "args": {
+                  "customer_id": "C106",
+                  "merchant": "HomeNest"
+                },
+                "status": "ok",
+                "error": null,
+                "latency_ms": 2.636,
+                "output_chars": 965
+              }
+            ],
+            "blocked": [],
+            "model_calls": [
+              {
+                "latency_ms": 851.741,
+                "tool_calls": [
+                  {
+                    "name": "get_customer_transactions",
+                    "args": {
+                      "customer_id": "C106",
+                      "merchant": "HomeNest"
+                    },
+                    "id": "fc_d38269ee-994b-4a7c-93c1-5917a964cf45"
+                  }
+                ],
+                "has_answer": false,
+                "final": false,
+                "usage": {
+                  "input_tokens": 2486,
+                  "output_tokens": 108,
+                  "total_tokens": 2594
+                },
+                "paced_ms": 55486.817,
+                "role": "tool_calls"
+              },
+              {
+                "latency_ms": 1144.062,
+                "tool_calls": [],
+                "has_answer": true,
+                "final": true,
+                "usage": {
+                  "input_tokens": 2852,
+                  "output_tokens": 505,
+                  "total_tokens": 3357
+                },
+                "paced_ms": 60496.853,
+                "role": "answer"
+              }
+            ],
+            "revisions": 0,
+            "tool_limit": false,
+            "error_kind": null,
+            "latency_ms": 117982.939
+          },
+          "score": {
+            "checks": {
+              "outcome": true,
+              "tools": true,
+              "arguments": true,
+              "amounts": true,
+              "figures": false,
+              "citations": true,
+              "authorization": null,
+              "contains": null
+            },
+            "detail": {
+              "outcome": {
+                "expected": "answer",
+                "actual": "answer"
+              },
+              "tools": {
+                "expected": [
+                  "get_customer_transactions"
+                ],
+                "actual": [
+                  "get_customer_transactions"
+                ],
+                "true_positive": 1,
+                "precision": 1.0,
+                "recall": 1.0
+              },
+              "arguments": [
+                {
+                  "tool": "get_customer_transactions",
+                  "match": {
+                    "customer_id": "C106",
+                    "merchant": "HomeNest"
+                  },
+                  "passed": true
+                }
+              ],
+              "amounts": {
+                "in_answer": 0,
+                "unsupported": []
+              },
+              "figures": [
+                {
+                  "figure": "selection_total Debit C106 merchant=HomeNest",
+                  "expected": "20610.78",
+                  "found": false
+                },
+                {
+                  "figure": "selection_total Credit C106 merchant=HomeNest",
+                  "expected": "5890.00",
+                  "found": false
+                }
+              ],
+              "citations": {
+                "expected": [],
+                "actual": [],
+                "true_positive": 0,
+                "precision": 1.0,
+                "recall": 1.0
+              }
+            },
+            "outcome": "answer",
+            "passed": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "dispute_status_c111",
+      "category": "disputes",
+      "description": "Dispute status and outcome; a resolved dispute does not imply a refund.",
+      "passed": false,
+      "turns": [
+        {
+          "question": "What is the status of C111's dispute?",
+          "expect": {
+            "tools": [
+              "get_customer_disputes"
+            ],
+            "args": [
+              {
+                "tool": "get_customer_disputes",
+                "match": {
+                  "customer_id": "C111"
+                }
+              }
+            ],
+            "figures": [
+              {
+                "figure": "dispute_amount",
+                "dispute_id": "D0003"
+              }
+            ]
+          },
+          "observed": {
+            "answer": "The dispute for customer C111 (Dispute D0003) is **Resolved**. The resolution outcome indicates that no financial adjustment was made.",
+            "sources": [],
+            "requested_tools": [
+              {
+                "name": "get_customer_disputes",
+                "args": {
+                  "customer_id": "C111"
+                },
+                "id": "fc_922806be-c8fd-4800-b12f-2df8fe8169f8"
+              }
+            ],
+            "executed_tools": [
+              {
+                "name": "get_customer_disputes",
+                "args": {
+                  "customer_id": "C111"
+                },
+                "status": "ok",
+                "error": null,
+                "latency_ms": 2.046,
+                "output_chars": 555
+              }
+            ],
+            "blocked": [],
+            "model_calls": [
+              {
+                "latency_ms": 557.411,
+                "tool_calls": [
+                  {
+                    "name": "get_customer_disputes",
+                    "args": {
+                      "customer_id": "C111"
+                    },
+                    "id": "fc_922806be-c8fd-4800-b12f-2df8fe8169f8"
+                  }
+                ],
+                "has_answer": false,
+                "final": false,
+                "usage": {
+                  "input_tokens": 2488,
+                  "output_tokens": 56,
+                  "total_tokens": 2544
+                },
+                "paced_ms": 55488.26,
+                "role": "tool_calls"
+              },
+              {
+                "latency_ms": 876.021,
+                "tool_calls": [],
+                "has_answer": true,
+                "final": true,
+                "usage": {
+                  "input_tokens": 2674,
+                  "output_tokens": 72,
+                  "total_tokens": 2746
+                },
+                "paced_ms": 60497.475,
+                "role": "answer"
+              }
+            ],
+            "revisions": 0,
+            "tool_limit": false,
+            "error_kind": null,
+            "latency_ms": 117422.025
+          },
+          "score": {
+            "checks": {
+              "outcome": true,
+              "tools": true,
+              "arguments": true,
+              "amounts": true,
+              "figures": false,
+              "citations": true,
+              "authorization": null,
+              "contains": null
+            },
+            "detail": {
+              "outcome": {
+                "expected": "answer",
+                "actual": "answer"
+              },
+              "tools": {
+                "expected": [
+                  "get_customer_disputes"
+                ],
+                "actual": [
+                  "get_customer_disputes"
+                ],
+                "true_positive": 1,
+                "precision": 1.0,
+                "recall": 1.0
+              },
+              "arguments": [
+                {
+                  "tool": "get_customer_disputes",
+                  "match": {
+                    "customer_id": "C111"
+                  },
+                  "passed": true
+                }
+              ],
+              "amounts": {
+                "in_answer": 0,
+                "unsupported": []
+              },
+              "figures": [
+                {
+                  "figure": "dispute_amount D0003",
+                  "expected": "7999.00",
+                  "found": false
+                }
+              ],
+              "citations": {
+                "expected": [],
+                "actual": [],
+                "true_positive": 0,
+                "precision": 1.0,
+                "recall": 1.0
+              }
+            },
+            "outcome": "answer",
+            "passed": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "policy_refund_approved",
+      "category": "policy",
+      "description": "Policy answer from two sections of one policy cites it once.",
+      "passed": true,
+      "turns": [
+        {
+          "question": "What happens when a refund is approved?",
+          "expect": {
+            "tools": [
+              "search_banking_policies"
+            ],
+            "citations": [
+              "POL-002"
+            ]
+          },
+          "observed": {
+            "answer": "When a refund is approved, the policy states that the refund should be processed through the appropriate payment processing workflow. The refund request is then tracked with a unique reference ID and its status moves through the stages of Pending, Processing, Completed, or Rejected.",
+            "sources": [
+              {
+                "policy_id": "POL-002",
+                "policy_name": "TRANSACTION REFUND POLICY"
+              }
+            ],
+            "requested_tools": [
+              {
+                "name": "search_banking_policies",
+                "args": {
+                  "question": "refund approved process"
+                },
+                "id": "fc_0352c817-768a-4965-ae96-61ffdb874791"
+              }
+            ],
+            "executed_tools": [
+              {
+                "name": "search_banking_policies",
+                "args": {
+                  "question": "refund approved process"
+                },
+                "status": "ok",
+                "error": null,
+                "latency_ms": 4873.088,
+                "output_chars": 1582
+              }
+            ],
+            "blocked": [],
+            "model_calls": [
+              {
+                "latency_ms": 705.431,
+                "tool_calls": [
+                  {
+                    "name": "search_banking_policies",
+                    "args": {
+                      "question": "refund approved process"
+                    },
+                    "id": "fc_0352c817-768a-4965-ae96-61ffdb874791"
+                  }
+                ],
+                "has_answer": false,
+                "final": false,
+                "usage": {
+                  "input_tokens": 2486,
+                  "output_tokens": 85,
+                  "total_tokens": 2571
+                },
+                "paced_ms": 55490.465,
+                "role": "tool_calls"
+              },
+              {
+                "latency_ms": 668.083,
+                "tool_calls": [],
+                "has_answer": true,
+                "final": true,
+                "usage": {
+                  "input_tokens": 2959,
+                  "output_tokens": 152,
+                  "total_tokens": 3111
+                },
+                "paced_ms": 55626.037,
+                "role": "answer"
+              }
+            ],
+            "revisions": 0,
+            "tool_limit": false,
+            "error_kind": null,
+            "latency_ms": 117365.172
+          },
+          "score": {
+            "checks": {
+              "outcome": true,
+              "tools": true,
+              "arguments": null,
+              "amounts": true,
+              "figures": null,
+              "citations": true,
+              "authorization": null,
+              "contains": null
+            },
+            "detail": {
+              "outcome": {
+                "expected": "answer",
+                "actual": "answer"
+              },
+              "tools": {
+                "expected": [
+                  "search_banking_policies"
+                ],
+                "actual": [
+                  "search_banking_policies"
+                ],
+                "true_positive": 1,
+                "precision": 1.0,
+                "recall": 1.0
+              },
+              "amounts": {
+                "in_answer": 0,
+                "unsupported": []
+              },
+              "citations": {
+                "expected": [
+                  "POL-002"
+                ],
+                "actual": [
+                  "POL-002"
+                ],
+                "true_positive": 1,
+                "precision": 1.0,
+                "recall": 1.0
+              }
+            },
+            "outcome": "answer",
+            "passed": true
+          }
+        }
+      ]
+    }
+  ]
+}

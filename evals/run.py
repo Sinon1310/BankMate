@@ -47,7 +47,7 @@ from evals import scorers
 from evals.cases import CASES_FILE, file_sha256, load_cases
 from evals.cassette import (CassetteError, CassetteMismatch, CassetteModel, CassettePolicyTool, CassetteWriter,
                             Replay, ReplayModel, ReplayPolicySearch, load_cassette)
-from evals.expected import FigureError, describe, figure
+from evals.expected import FigureError, describe, fact, figure
 from evals.live import (GuardedModel, LiveRunRefused, ModelCallBudget, StopRun, TokenPacer, check_index_copy,
                         classify, classify_kind, isolated_policy_index, safe_json, secrets_in_environment,
                         tree_sha256)
@@ -67,7 +67,20 @@ OFFLINE_KEY = "offline-evaluation-no-key"
 # can never look equivalent to another run.
 EVALUATOR_FILES = tuple(Path(__file__).resolve().parent / name
                         for name in ("recorder.py", "scorers.py", "cases.py", "expected.py", "run.py",
-                                     "cassette.py", "live.py"))
+                                     "cassette.py", "live.py", "answers.py"))
+# Execution components: what the model saw and how the loop ran. A replay refuses any change to the
+# strict ones (they would make the recorded responses meaningless) and notes changes to the others
+# (they only affect a future live run: replay uses the recorded policy outputs).
+EXECUTION_STRICT = ("system_prompt_sha256", "tool_schemas_sha256", "dataset_sha256", "max_tool_steps")
+# Answer processing (grounding repair, sanitising, citations, data-scope notes) runs after the model's
+# last call of a turn: a change alters the answers, not the recorded model inputs (those are checked
+# call by call), so replay notes it and re-runs the current code.
+EXECUTION_NOTED = ("policy_index_fingerprint", "retrieval", "answer_processing_sha256")
+ANSWER_PROCESSING_FILES = tuple(PROJECT_ROOT / "app" / name for name in ("answer_scope.py", "citations.py",
+                                                                         "grounding.py"))
+ANSWER_PROCESSING_FUNCTIONS = (("app.assistant", "_answer"), ("app.assistant", "_scope_results"),
+                               ("app.assistant", "_enforce_grounding"), ("app.assistant", "_ensure_markers"),
+                               ("app.security", "sanitize_answer"))
 SESSION_STORES = ("conversation_sessions", "grounding_context", "session_last_active",
                   "conversation_versions", "request_results", "requests_in_flight")
 
@@ -203,8 +216,11 @@ def run_case(case, chunks=None, driver=None):
             except ScriptError as error:
                 error_kind = "script_error"
                 logging.getLogger(__name__).error("Case %s: %s", case["id"], error)
-            latency_ms = round((time.perf_counter() - started) * 1000, 3)
+            elapsed_ms = (time.perf_counter() - started) * 1000
             driver.end_turn(case, index)
+            # Live pacing waits happen inside the turn; they are reported separately, never as latency.
+            paced_ms = round(sum(c.get("paced_ms", 0) or 0 for c in recorder.model_calls), 3)
+            latency_ms = round(max(elapsed_ms - paced_ms, 0.0), 3)
 
             executed = recorder.tool_executions
             for entry in executed:
@@ -223,16 +239,23 @@ def run_case(case, chunks=None, driver=None):
                 "tool_limit": answer == assistant.TOOL_LIMIT_MESSAGE,
                 "error_kind": error_kind,
                 "latency_ms": latency_ms,
+                "provider_latency_ms": round(sum(c.get("latency_ms") or 0 for c in recorder.model_calls), 3),
+                "paced_ms": paced_ms,
             }
+            figure_values, facts, expectation_errors = [], [], {}
             try:
-                figure_values = [(describe(spec), figure(spec)) for spec in expect.get("figures", [])]
-                figure_error = None
+                figure_values = [{"label": describe(spec), "value": figure(spec), "spec": spec,
+                                  "required": spec.get("required", True)} for spec in expect.get("figures", [])]
             except FigureError as error:
-                figure_values, figure_error = [], str(error)
-            score = score_turn(expect, observed, supported, figure_values, turn["question"])
-            if figure_error:
-                score["checks"]["figures"] = False
-                score["detail"]["figures_error"] = figure_error
+                expectation_errors["figures"] = str(error)
+            try:
+                facts = [fact(spec) for spec in expect.get("facts", [])]
+            except FigureError as error:
+                expectation_errors["facts"] = str(error)
+            score = score_turn(expect, observed, supported, figure_values, turn["question"], facts)
+            for check, message in expectation_errors.items():
+                score["checks"][check] = False
+                score["detail"][f"{check}_error"] = message
                 score["passed"] = False
             turns.append({"question": turn["question"], "expect": expect,
                           "observed": _public(observed), "score": score})
@@ -275,6 +298,24 @@ def evaluator_code_hashes(files=None):
             for path in (EVALUATOR_FILES if files is None else files)}
 
 
+def answer_processing_hashes(files=None, functions=None):
+    """
+    {name: SHA-256} for the code that turns the model's final message into the
+    answer: whole modules (data-scope notes, citations, grounding) and the
+    source of the assistant/security functions that apply them.
+    """
+
+    import importlib
+    import inspect
+
+    hashes = {Path(path).name: hashlib.sha256(Path(path).read_bytes()).hexdigest()
+              for path in (ANSWER_PROCESSING_FILES if files is None else files)}
+    for module, name in (ANSWER_PROCESSING_FUNCTIONS if functions is None else functions):
+        source = inspect.getsource(getattr(importlib.import_module(module), name))
+        hashes[f"{module}.{name}"] = _sha256(source)
+    return hashes
+
+
 def run_metadata(mode, cases_path, cases, chunks, model_id):
     from langchain_core.utils.function_calling import convert_to_openai_tool
 
@@ -295,11 +336,20 @@ def run_metadata(mode, cases_path, cases, chunks, model_id):
         "policy_index_fingerprint": vector_store.fingerprint(chunks),
         "retrieval": {"k": retriever.POLICY_SEARCH_K, "max_distance": retriever.POLICY_MAX_DISTANCE},
         "max_tool_steps": assistant.MAX_TOOL_STEPS,
+        "answer_processing_sha256": answer_processing_hashes(),
         "cases_sha256": file_sha256(cases_path),
+        "case_inputs_sha256": _sha256(json.dumps({c["id"]: case_input_sha256(c) for c in cases}, sort_keys=True)),
+        "case_expectations_sha256": _sha256(json.dumps({c["id"]: case_expect_sha256(c) for c in cases},
+                                                       sort_keys=True)),
         "evaluator_schema": SCHEMA_VERSION,
         "evaluator_code_sha256": evaluator_code_hashes(),
     }
     commit = _git("rev-parse", "HEAD")
+    # Immutable side: everything that shapes what the model is asked and how the loop runs.
+    execution = {k: components[k] for k in EXECUTION_STRICT + EXECUTION_NOTED + ("case_inputs_sha256",)}
+    # Mutable side: how the run is judged. Changing it allows re-scoring a recorded run.
+    evaluation = {k: components[k] for k in ("case_expectations_sha256", "evaluator_schema",
+                                             "evaluator_code_sha256")}
     return {
         "schema_version": SCHEMA_VERSION,
         "mode": mode,
@@ -312,6 +362,10 @@ def run_metadata(mode, cases_path, cases, chunks, model_id):
         "cases": {"file": cases_display, "sha256": components["cases_sha256"], "count": len(cases)},
         "components": components,
         "fingerprint": _sha256(json.dumps({**components, "git_commit": commit}, sort_keys=True)),
+        "execution_fingerprint": _sha256(json.dumps(execution, sort_keys=True)),
+        "evaluation_fingerprint": _sha256(json.dumps(evaluation, sort_keys=True)),
+        "token_usage": {"offline": "none (scripted model)", "live": "reported by the provider",
+                        "replay": "recorded in the cassette; none consumed by the replay"}.get(mode),
         "environment": {"python": platform.python_version(), "platform": platform.system().lower()},
     }
 
@@ -324,16 +378,30 @@ def run_offline(cases_path=CASES_FILE, only=None):
     results = [run_case(case, chunks) for case in cases]
     return {
         "run": run_metadata("offline", cases_path, cases, chunks, "scripted-offline"),
-        "metrics": scorers.aggregate(results),
+        "metrics": scorers.aggregate(results, "offline"),
         "by_category": scorers.by_category(results),
         "cases": results,
     }
 
 
 def case_sha256(case):
-    """Content hash of one case (replay refuses a case whose definition changed since recording)."""
+    """Content hash of the whole case definition."""
 
     return _sha256(json.dumps(case, sort_keys=True, ensure_ascii=False))
+
+
+def case_input_sha256(case):
+    """What the model is given: the questions, in order, and any injected tool failures. Never changes on replay."""
+
+    return _sha256(json.dumps({"id": case["id"], "questions": [t["question"] for t in case["turns"]],
+                               "fail_tools": sorted(case.get("fail_tools", []))}, sort_keys=True, ensure_ascii=False))
+
+
+def case_expect_sha256(case):
+    """How the case is judged: its expectations. May change; a recorded run is then re-scored."""
+
+    return _sha256(json.dumps({"category": case.get("category"), "expect": [t.get("expect", {}) for t in case["turns"]]},
+                              sort_keys=True, ensure_ascii=False))
 
 
 def _worst_case_calls(case):
@@ -503,7 +571,7 @@ def run_live(cases_path=CASES_FILE, only=None, *, confirm=False, model=None, pol
             "provider_retries": sdk_retries_of(live_model) if model is None else "injected model",
             "timeout_seconds": _llm_timeout(),
         },
-        "metrics": scorers.aggregate(results),
+        "metrics": scorers.aggregate(results, "live"),
         "by_category": scorers.by_category(results),
         "cases": results,
     }
@@ -512,6 +580,9 @@ def run_live(cases_path=CASES_FILE, only=None, *, confirm=False, model=None, pol
         "git_commit": run["git"]["commit"], "dataset_sha256": run["components"]["dataset_sha256"],
         "cases_file": run["cases"]["file"],
         "case_sha256": {c["id"]: case_sha256(c) for c in completed},
+        "case_input_sha256": {c["id"]: case_input_sha256(c) for c in completed},
+        "case_expect_sha256": {c["id"]: case_expect_sha256(c) for c in completed},
+        "execution": {k: run["components"][k] for k in EXECUTION_STRICT + EXECUTION_NOTED},
     })
     return report, cassette
 
@@ -565,8 +636,80 @@ def no_live_model():
         assistant._get_model, llm.get_assistant_model = saved
 
 
+def _execution_reference(cassette_path, recorded):
+    """
+    The recorded execution components and per-case inputs, with their source:
+    the cassette itself, or, for a cassette written before Evaluator V2, the
+    baseline report saved next to it (its fingerprint must match the cassette's).
+    """
+
+    if recorded.get("execution"):
+        return {"source": "cassette", "components": recorded["execution"],
+                "inputs": recorded.get("case_input_sha256", {}), "expect": recorded.get("case_expect_sha256", {}),
+                "questions": None}
+    path = Path(cassette_path)
+    sibling = path.with_name(path.name.replace(".cassette.json", ".json"))
+    if sibling == path or not sibling.exists():
+        raise CassetteMismatch("this cassette predates execution fingerprints and has no baseline report next to "
+                               "it, so its execution inputs cannot be verified")
+    report = json.loads(sibling.read_text(encoding="utf-8"))
+    if report.get("run", {}).get("fingerprint") != recorded.get("fingerprint"):
+        raise CassetteMismatch(f"{sibling.name} is not the report this cassette was recorded with "
+                               "(fingerprints differ)")
+    components = report["run"]["components"]
+    return {"source": f"baseline report {sibling.name}",
+            "components": {k: components.get(k) for k in EXECUTION_STRICT + EXECUTION_NOTED},
+            "inputs": None, "expect": None,
+            "questions": {c["id"]: [t["question"] for t in c["turns"]] for c in report.get("cases", [])}}
+
+
+def verify_replay_inputs(cassette_path, recorded, cases, components, strict_inputs=True):
+    """
+    Check everything that shaped the recorded run before replaying it. Raises
+    CassetteMismatch for a changed question, injected failure, system prompt,
+    tool schema, dataset or tool-loop limit (unless strict_inputs is False, in
+    which case they are reported). Expectation changes are allowed and listed:
+    the recorded run is re-scored against the current expectations.
+    """
+
+    reference = _execution_reference(cassette_path, recorded)
+    problems, notes, rescored = [], [], []
+    if recorded.get("dataset_sha256") not in (None, components["dataset_sha256"]):
+        problems.append("the active dataset differs from the one the cassette was recorded on")
+    for key in EXECUTION_STRICT:
+        if key in reference["components"] and reference["components"][key] != components[key]:
+            problems.append(f"{key} changed since the recording")
+    for key in EXECUTION_NOTED:
+        if key in reference["components"] and reference["components"][key] != components[key]:
+            reason = ("replay re-runs the current answer processing on the recorded responses"
+                      if key == "answer_processing_sha256" else "replay uses the recorded policy outputs")
+            notes.append(f"{key} changed since the recording ({reason}; model inputs are still verified per call)")
+    for case in cases:
+        case_id = case["id"]
+        if reference["inputs"] is not None:
+            if reference["inputs"].get(case_id) != case_input_sha256(case):
+                problems.append(f"case {case_id}: questions or injected tool failures changed since it was recorded")
+            elif reference["expect"].get(case_id) != case_expect_sha256(case):
+                rescored.append(case_id)
+        else:
+            if reference["questions"].get(case_id) != [t["question"] for t in case["turns"]]:
+                problems.append(f"case {case_id}: questions changed since it was recorded")
+            elif recorded.get("case_sha256", {}).get(case_id) != case_sha256(case):
+                rescored.append(case_id)     # definition changed, questions verified; tool failures via model inputs
+    if problems:
+        if strict_inputs:
+            raise CassetteMismatch("; ".join(problems))
+        notes.extend(f"ALLOWED DRIFT: {p}" for p in problems)
+    return {"execution_source": reference["source"], "verified": list(EXECUTION_STRICT) + ["case questions"],
+            "notes": notes, "rescored_cases": rescored}
+
+
 def run_replay(cassette_path, cases_path=CASES_FILE, only=None, strict_inputs=True):
-    """Replay a live cassette through the real loop; return the report. Raises CassetteError on any mismatch."""
+    """
+    Replay a live cassette through the real loop and score it against the
+    current expectations; return the report. Raises CassetteError on any
+    mismatch in the recorded execution. Never calls Groq.
+    """
 
     cassette = load_cassette(cassette_path)
     recorded = cassette.get("run", {})
@@ -577,24 +720,17 @@ def run_replay(cassette_path, cases_path=CASES_FILE, only=None, strict_inputs=Tr
     if not wanted:
         raise CassetteError("the cassette has no completed cases to replay")
     cases = load_cases(cases_path, wanted)
-    for case in cases:
-        if recorded.get("case_sha256", {}).get(case["id"]) != case_sha256(case):
-            raise CassetteMismatch(f"case {case['id']} changed since it was recorded")
     chunks = policy_chunks()
-    replay = Replay(cassette, strict_inputs=strict_inputs)
     run = run_metadata("replay", cases_path, cases, chunks, recorded.get("model"))
-    if recorded.get("dataset_sha256") != run["components"]["dataset_sha256"]:
-        message = "the active dataset differs from the one the cassette was recorded on"
-        if strict_inputs:
-            raise CassetteMismatch(message)
-        logging.getLogger(__name__).warning(message)
+    verification = verify_replay_inputs(cassette_path, recorded, cases, run["components"], strict_inputs)
+    replay = Replay(cassette, strict_inputs=strict_inputs)
     with no_live_model():
         results = [run_case(case, driver=ReplayDriver(replay)) for case in cases]
     run["replay_of"] = {"fingerprint": recorded.get("fingerprint"), "created_utc": recorded.get("created_utc"),
                         "git_commit": recorded.get("git_commit"),
                         "cassette_sha256": file_sha256(cassette_path),
-                        "strict_inputs": strict_inputs, "input_drift": replay.input_drift}
-    return {"run": run, "metrics": scorers.aggregate(results), "by_category": scorers.by_category(results),
+                        "strict_inputs": strict_inputs, "input_drift": replay.input_drift, **verification}
+    return {"run": run, "metrics": scorers.aggregate(results, "replay"), "by_category": scorers.by_category(results),
             "cases": results}
 
 
@@ -694,8 +830,13 @@ def main(argv=None):
         try:
             report = run_replay(args.cassette, args.cases, args.only, strict_inputs=not args.allow_input_drift)
         except CassetteError as error:
-            print(f"Replay failed: {error}", file=sys.stderr)
+            print(f"Replay failed (no API call was made): {error}", file=sys.stderr)
             return 2
+        info = report["run"]["replay_of"]
+        print(f"Replay verified against the {info['execution_source']}: {', '.join(info['verified'])}; "
+              f"re-scored against changed expectations: {', '.join(info['rescored_cases']) or 'none'}")
+        for note in info["notes"]:
+            print(f"note: {note}")
     else:
         report = run_offline(args.cases, args.only)
     path = write_report(report, args.out)

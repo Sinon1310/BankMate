@@ -232,19 +232,35 @@ python -m app.compare_retrieval     # Similarity vs MMR ranking
 
 Add `--json PATH` to `evaluate_rag` to save the same results with the dataset hash and policy-index fingerprint.
 
-Assistant behaviour is evaluated with 22 cases (customer figures, filters, disputes, policy citations, out-of-scope, authorization, injection, follow-ups, tool limits and failures) in `evals/`. The offline run drives the real assistant loop and tools with a scripted model — no API key, Groq calls or ChromaDB — and scores tool selection, required arguments, whether every ₹ amount in an answer comes from the tool results, expected figures computed from the ledger, citations and refusals:
+Assistant behaviour is evaluated with 23 cases (customer figures, filters, disputes, policy citations, out-of-scope, authorization, injection, follow-ups, tool limits and failures) in `evals/`. The offline run drives the real assistant loop and tools with a scripted model — no API key, Groq calls or ChromaDB. It scores:
+
+- tool selection and required arguments;
+- whether every money amount in an answer comes from the tool results, including amounts in table cells or without a ₹ sign;
+- the figures each question asks for, computed from the ledger and checked against their labels;
+- non-financial facts (dispute status and outcome, transaction IDs and counts, date ranges);
+- citations and refusals.
+
+Amount formatting is reported without failing a case:
 
 ```bash
 python -m evals.run                                   # JSON report in evals/results/
 python -m evals.compare BASE.json NEW.json --fail-on-regression
 ```
 
-A live run uses the real Groq model and production tools on selected cases only. It needs `--confirm-live` and named `--case`s; it enforces case and model-call budgets, paces requests to stay under a tokens- and requests-per-minute limit, stops the whole run at the first rate-limit, authentication or connection failure (the Groq client's automatic retries are disabled for live evaluation only, so each failure is exactly one request; the app keeps its single retry), and runs policy searches on a temporary copy of `chroma_db/`. The report and a cassette of every model response and policy-search output are saved in `evals/baselines/` (API key redacted). A cassette replays offline through the real assistant loop without any API call, failing loudly if the recording doesn't match:
+A live run uses the real Groq model and production tools on selected cases only. It needs `--confirm-live` and named `--case`s; it enforces case and model-call budgets, paces requests to stay under a tokens- and requests-per-minute limit, stops the whole run at the first rate-limit, authentication or connection failure (the Groq client's automatic retries are disabled for live evaluation only, so each failure is exactly one request; the app keeps its single retry), and runs policy searches on a temporary copy of `chroma_db/`. The report and a cassette of every model response and policy-search output are saved in `evals/baselines/` (API key redacted). A cassette replays offline through the real assistant loop without any API call. Replay fails loudly if the recorded execution (questions, system prompt, tool schemas, dataset, tool outputs, model inputs) doesn't match. When only the expectations changed, it re-scores the recorded answers:
 
 ```bash
 python -m evals.run --mode live --confirm-live --baseline NAME --case ID [--case ID ...]
 python -m evals.run --mode replay --cassette evals/baselines/NAME.cassette.json
 ```
+
+A replay score is not a new live evaluation. It re-runs the current BankMate code (tools, grounding, sanitising, data-scope notes, scoring) on the model responses recorded in the cassette, after checking that every model input is byte-identical to the recording. The `phase2-live-6` baseline scored 3/6 under the original evaluator, 5/6 when replayed against corrected expectations (Evaluator V2), and 6/6 after BankMate began appending the reported date range to period figures. That 6/6 reflects the recorded answers of six single-turn cases plus deterministic post-processing. Only a new live run measures how the model itself behaves now.
+
+Known limitations of the evaluation:
+- Scoring is pattern-based, not semantic.
+- Label matching, refund negation and date parsing cover common phrasings only; unusual wording can be accepted as "unlabelled" or flagged in the safe direction.
+- Formatting rules (₹ on every amount, two decimals) are measured but neither enforced nor gating.
+- The live baseline is a single sample at temperature 0.2.
 
 Current results (k=3, threshold 1.2): Hit@3 0.931, Precision@3 0.859 and section recall 0.786 on 29 policy questions; false-positive rate 0.111 on 9 out-of-scope and near-miss questions.
 

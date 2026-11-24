@@ -38,6 +38,7 @@ from app.errors import (
     AssistantError,
     classify_provider_error
 )
+from app.answer_scope import add_scope_note, result_customers
 from app.history import trim_to_recent_turns
 from app.llm import env_number, get_assistant_model, tool_map
 from app.tool_args import (
@@ -506,6 +507,27 @@ def _grounding_scope(context, turn):
     return False, [], customer_support
 
 
+def _scope_results(context, turn, question):
+    """
+    Customer-tool results that may define this answer's date scope: this
+    turn's own results; or, for a follow-up answered without tools, the
+    immediately previous turn's results, only if that turn read customer
+    data and the question names no other customer. Older turns, policy
+    turns and other customers never lend their dates. (answer_scope then
+    keeps only results whose money values appear in the answer.)
+    """
+
+    if turn["kind"] != TURN_NONE:
+        return list(turn["customer"])
+    if not context["turns"] or context["turns"][-1]["kind"] != TURN_CUSTOMER:
+        return []
+    previous = list(context["turns"][-1]["customer"])
+    named = referenced_customer_ids([question])
+    if named and not named <= result_customers(previous):
+        return []
+    return previous
+
+
 def _commit(session_id, history, context, turn, version, request_id, result):
     """
     Atomically store a completed turn (trimmed to the most recent turns)
@@ -647,6 +669,9 @@ def _answer(question, session_id, model, tools, messages, context, version, requ
 
             # Answers are rendered as markdown: neutralise links/images.
             raw_answer = sanitize_answer(raw_answer)
+            # Period figures need their date range and balances their as-of
+            # date; append the scope the tools reported if the model omitted it.
+            raw_answer = add_scope_note(raw_answer, _scope_results(context, turn, question))
             # Keep history consistent with what the user sees.
             messages[-1] = AIMessage(content=raw_answer)
 

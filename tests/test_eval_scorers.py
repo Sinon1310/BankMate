@@ -37,7 +37,7 @@ def test_numbers_in_walks_json_and_plain_text():
 def test_inr_formatting_round_trips_through_extraction():
     for value in ("187226.80", "-40764.56", "2750.00", "95000", "0.50"):
         assert scorers.extract_amounts(format_inr(value)) == [abs(D(value))]
-    assert format_inr("-14720.78") == "−₹14,720.78" and format_inr("12345678") == "₹1,23,45,678"
+    assert format_inr("-14720.78") == "−₹14,720.78" and format_inr("12345678") == "₹1,23,45,678.00"
 
 
 def test_amount_from_the_question_is_allowed_but_invented_ones_are_not():

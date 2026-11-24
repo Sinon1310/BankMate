@@ -197,12 +197,15 @@ class ScriptError(ValueError):
 
 
 def format_inr(value):
-    """Decimal-safe ₹ formatting with Indian grouping (₹1,87,226.80; −₹40.50)."""
+    """
+    Decimal-safe ₹ formatting with Indian grouping and two decimals (₹1,87,226.80; −₹40.50; ₹95,000.00),
+    the format the system prompt asks for (rule 56), so scripted answers model compliant output.
+    """
 
     amount = Decimal(str(value))
     sign = "−" if amount < 0 else ""
     amount = abs(amount)
-    whole, paise = int(amount), amount - int(amount)
+    whole = int(amount)
     digits = str(whole)
     if len(digits) > 3:
         head, tail, groups = digits[:-3], digits[-3:], []
@@ -210,10 +213,7 @@ def format_inr(value):
             groups.insert(0, head[-2:])
             head = head[:-2]
         digits = ",".join(([head] if head else []) + groups + [tail])
-    text = f"{sign}₹{digits}"
-    if paise:
-        text += f"{amount.quantize(Decimal('0.01'))}"[-3:]
-    return text
+    return f"{sign}₹{digits}" + f"{amount.quantize(Decimal('0.01'))}"[-3:]
 
 
 def _lookup(data, path):

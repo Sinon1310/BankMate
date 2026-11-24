@@ -66,7 +66,7 @@ def test_offline_suite_passes_without_groq_embeddings_or_chromadb(data, offline_
                 for c in report["cases"] if not c["passed"]]
     assert failures == []
     m = report["metrics"]
-    assert m["cases"] >= 20 and m["amounts_in_answers"] >= 20
+    assert m["cases"] >= 20 and m["amounts_checked"] >= 20
     for name in ("case_pass_rate", "tool_selection_exact", "argument_accuracy", "amount_grounding_rate",
                  "figure_recall", "citation_precision", "citation_recall", "authorization_pass_rate"):
         assert m[name] == 1.0, name
@@ -227,7 +227,7 @@ def test_cli_writes_a_report(data, tmp_path, monkeypatch, capsys):
 def test_fingerprint_covers_every_evaluation_implementation_file(data):
     hashes = run.run_offline(only=["metrics_october_c102"])["run"]["components"]["evaluator_code_sha256"]
     assert set(hashes) == {"recorder.py", "scorers.py", "cases.py", "expected.py", "run.py",
-                           "cassette.py", "live.py"}
+                           "cassette.py", "live.py", "answers.py"}
     assert all(len(value) == 64 for value in hashes.values())
     assert hashes == run.evaluator_code_hashes()
 
